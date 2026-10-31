@@ -2,11 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
-  <title>Walkie-Talkie & Chat Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chat Pro & Walkie</title>
 
-  <!-- PWA Manifest inyectado directamente para permitir la instalación -->
-  <link rel="manifest" href='data:application/manifest+json,{"name":"Walkie Talkie Pro","short_name":"WalkieTalkie","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3616/3616930.png","sizes":"512x512","type":"image/png"}]}'>
+  <!-- Enlace al Manifest físico para permitir Instalación PWA -->
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,379 +15,167 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- PeerJS para Audio/Video RTC -->
+  <!-- PeerJS y Firebase Realtime Database -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      touch-action: manipulation;
-    }
-    .glass-header {
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(12px);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     .chat-bg {
       background-size: cover;
       background-position: center;
-      transition: background-image 0.3s ease;
     }
-    /* Estilos dinámicos para burbujas de chat */
     .bubble-sent {
       background-color: var(--bubble-color, #2563eb);
       color: var(--font-color, #ffffff);
     }
-    .bubble-received {
-      background-color: #334155;
-      color: #ffffff;
-    }
   </style>
 </head>
-<body class="bg-slate-900 text-white h-screen flex flex-col justify-between overflow-hidden select-none" id="appBody">
+<body class="bg-slate-950 text-white h-screen flex flex-col justify-between overflow-hidden select-none" id="appBody">
 
-  <!-- HEADER PRINCIPAL FIJO -->
-  <header class="glass-header border-b border-slate-800 p-4 flex items-center justify-between shrink-0 z-50">
+  <!-- HEADER NATIVO TIPO WHATSAPP -->
+  <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 z-50">
     <div class="flex items-center space-x-3">
-      <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse" id="statusDot"></div>
+      <div class="relative">
+        <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-lg">
+          <i class="fa-solid fa-user"></i>
+        </div>
+        <div class="w-3 h-3 rounded-full bg-emerald-500 absolute bottom-0 right-0 border-2 border-slate-900" id="statusDot"></div>
+      </div>
       <div>
-        <h1 class="font-bold text-base leading-tight">Walkie-Talkie HD</h1>
-        <p class="text-xs text-slate-400" id="statusText">Iniciando sistema...</p>
+        <h1 class="font-bold text-base leading-tight">Contacto / Canal 1</h1>
+        <p class="text-xs text-emerald-400" id="statusText">En línea</p>
       </div>
     </div>
-    <button onclick="solicitarPermisos()" class="text-xs bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg active:scale-95 transition">
-      <i class="fa-solid fa-key text-amber-400 mr-1"></i> Permisos
-    </button>
+
+    <!-- Acciones Rápidas (Llamada, Video, Walkie y Ajustes) -->
+    <div class="flex items-center space-x-2">
+      <button onclick="iniciarLlamadaVoz()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-emerald-400 active:scale-95">
+        <i class="fa-solid fa-phone"></i>
+      </button>
+      <button onclick="abrirModoVideo()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-blue-400 active:scale-95">
+        <i class="fa-solid fa-video"></i>
+      </button>
+      <button onclick="toggleWalkieModal()" class="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center text-white active:scale-95 shadow-lg shadow-red-900/40">
+        <i class="fa-solid fa-walkie-talkie"></i>
+      </button>
+      <button onclick="toggleAjustes()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 active:scale-95">
+        <i class="fa-solid fa-ellipsis-vertical"></i>
+      </button>
+    </div>
   </header>
 
-  <!-- CONTENIDO RECIPIENTE (PESTAÑAS) -->
-  <main class="flex-1 relative overflow-hidden chat-bg" id="mainContainer">
-
-    <!-- SECCIÓN 1: WALKIE-TALKIE (PUSH TO TALK) -->
-    <section id="tab-walkie" class="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-6">
-      <div class="text-center space-y-1">
-        <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Canal de Voz Bidireccional</p>
-        <h2 class="text-xl font-bold text-slate-200">Presiona para Transmitir</h2>
+  <!-- ÁREA PRINCIPAL DE CHAT -->
+  <main class="flex-1 overflow-y-auto p-4 space-y-3 chat-bg bg-slate-950" id="chatContainer">
+    <!-- Mensaje de Bienvenida / Gemini AI -->
+    <div class="flex justify-start">
+      <div class="bg-slate-800 border border-slate-700 p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm shadow-md">
+        <p class="font-bold text-xs text-amber-400 mb-1"><i class="fa-solid fa-robot mr-1"></i> Asistente IA Gemini</p>
+        ¡Hola! Esta es tu sala de chat privada. Puedes escribir mensajes, adjuntar imágenes, enviar notas de voz, o activar la videollamada y el walkie-talkie desde los botones de arriba.
       </div>
-
-      <button id="btnTalk" disabled class="w-52 h-52 rounded-full bg-red-600 border-8 border-red-950 flex flex-col items-center justify-center shadow-2xl shadow-red-900/50 active:scale-95 disabled:opacity-40 disabled:bg-slate-700 disabled:border-slate-800 transition-all duration-150">
-        <i class="fa-solid fa-microphone text-5xl mb-2"></i>
-        <span class="font-bold text-sm tracking-wider" id="btnTalkText">CONECTANDO...</span>
-      </button>
-
-      <div class="bg-slate-800/80 backdrop-filter blur-md px-4 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 flex items-center space-x-2">
-        <i class="fa-solid fa-shield-halved text-emerald-400"></i>
-        <span>Canal Directo WebRTC Activo</span>
-      </div>
-    </section>
-
-    <!-- SECCIÓN 2: VIDEOLLAMADA EN VIVO -->
-    <section id="tab-video" class="absolute inset-0 hidden bg-slate-950 flex flex-col p-4 space-y-4">
-      <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
-        <!-- Video Remoto (El otro usuario) -->
-        <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
-        
-        <!-- Video Local (Tu cámara flotante) -->
-        <div class="absolute bottom-3 right-3 w-28 h-40 rounded-xl overflow-hidden border-2 border-slate-700 shadow-xl bg-black">
-          <video id="localVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
-        </div>
-
-        <div id="videoPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-slate-500">
-          <i class="fa-solid fa-video-slash text-4xl mb-2"></i>
-          <p class="text-xs">Cámara apagada</p>
-        </div>
-      </div>
-
-      <div class="flex justify-center space-x-4 shrink-0">
-        <button onclick="alternarCamara()" class="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 active:scale-95">
-          <i class="fa-solid fa-camera-rotate"></i>
-        </button>
-        <button id="btnToggleVideo" onclick="iniciarVideoLlamada()" class="px-6 rounded-full bg-emerald-600 font-bold text-sm flex items-center space-x-2 active:scale-95">
-          <i class="fa-solid fa-video"></i>
-          <span>Transmitir Video</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- SECCIÓN 3: CHAT & GEMINI AI -->
-    <section id="tab-chat" class="absolute inset-0 hidden flex flex-col p-4">
-      <div id="chatMessages" class="flex-1 overflow-y-auto space-y-3 pr-1">
-        <div class="flex justify-start">
-          <div class="bubble-received p-3 rounded-2xl max-w-[80%] text-sm shadow">
-            <p class="font-bold text-xs text-amber-400 mb-1">Asistente IA Gemini</p>
-            ¡Hola! Estoy listo para ayudarte. Escribe tu mensaje o pregunta.
-          </div>
-        </div>
-      </div>
-
-      <!-- Barra de Entrada de Chat -->
-      <div class="mt-3 flex items-center space-x-2 shrink-0">
-        <input type="text" id="chatInput" placeholder="Escribe un mensaje o consulta a Gemini..." class="flex-1 bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
-        <button onclick="enviarMensaje()" class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white active:scale-95 shrink-0">
-          <i class="fa-solid fa-paper-plane"></i>
-        </button>
-      </div>
-    </section>
-
-    <!-- SECCIÓN 4: AJUSTES Y PERSONALIZACIÓN -->
-    <section id="tab-settings" class="absolute inset-0 hidden p-6 overflow-y-auto space-y-6">
-      <h2 class="text-lg font-bold text-slate-200 border-b border-slate-800 pb-2">Personalización de App</h2>
-
-      <!-- Colores de Fondo -->
-      <div class="space-y-2">
-        <label class="text-xs font-semibold text-slate-400">Color de Fondo Solido (12 Opciones)</label>
-        <div class="grid grid-cols-6 gap-2" id="colorGrid"></div>
-      </div>
-
-      <!-- Imagen de Galería -->
-      <div class="space-y-2">
-        <label class="text-xs font-semibold text-slate-400">Fondo con Imagen de Galería</label>
-        <input type="file" id="bgFileInput" accept="image/*" class="hidden" onchange="cargarImagenFondo(event)">
-        <button onclick="document.getElementById('bgFileInput').click()" class="w-full py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 active:scale-95">
-          <i class="fa-solid fa-image text-blue-400"></i>
-          <span>Seleccionar Foto de la Galería</span>
-        </button>
-      </div>
-
-      <!-- Personalización de Chat -->
-      <div class="space-y-4 border-t border-slate-800 pt-4">
-        <div>
-          <label class="text-xs font-semibold text-slate-400 block mb-1">Color de Burbuja enviada</label>
-          <input type="color" id="bubbleColorPicker" value="#2563eb" onchange="cambiarColorBurbuja(this.value)" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-slate-400 block mb-1">Color de Letra de Chat</label>
-          <input type="color" id="fontColorPicker" value="#ffffff" onchange="cambiarColorFuente(this.value)" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
-        </div>
-      </div>
-    </section>
-
+    </div>
   </main>
 
-  <!-- ELEMENTOS DE AUDIO OCULTOS -->
+  <!-- PANTALLA DE VIDEOLLAMADA (OCULTA POR DEFECTO) -->
+  <div id="videoModal" class="fixed inset-0 bg-slate-950 z-50 hidden flex-col p-4 space-y-4">
+    <div class="flex items-center justify-between">
+      <h3 class="font-bold text-sm">Videollamada en Vivo</h3>
+      <button onclick="cerrarVideo()" class="text-xs bg-red-600 px-3 py-1.5 rounded-lg font-bold">Cerrar</button>
+    </div>
+    <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800">
+      <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+      <div class="absolute bottom-3 right-3 w-28 h-40 rounded-xl overflow-hidden border-2 border-slate-700 shadow-xl bg-black">
+        <video id="localVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FLOTANTE WALKIE-TALKIE (PUSH TO TALK) -->
+  <div id="walkieModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-6 space-y-6">
+    <button onclick="toggleWalkieModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white">
+      <i class="fa-solid fa-xmark text-lg"></i>
+    </button>
+    <div class="text-center space-y-1">
+      <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Modo Walkie-Talkie</p>
+      <h2 class="text-xl font-bold text-slate-200">Mantén presionado para hablar</h2>
+    </div>
+    <button id="btnTalk" class="w-48 h-48 rounded-full bg-red-600 border-8 border-red-950 flex flex-col items-center justify-center shadow-2xl shadow-red-900/50 active:scale-95 transition-all">
+      <i class="fa-solid fa-microphone text-5xl mb-2"></i>
+      <span class="font-bold text-xs" id="btnTalkText">HABLAR</span>
+    </button>
+  </div>
+
+  <!-- PANEL DE AJUSTES Y PERSONALIZACIÓN -->
+  <div id="ajustesModal" class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-50 hidden p-6 overflow-y-auto space-y-6">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+      <h2 class="text-lg font-bold">Personalización de Chat</h2>
+      <button onclick="toggleAjustes()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <div>
+      <label class="text-xs font-semibold text-slate-400 block mb-2">Fondo con Foto de Galería</label>
+      <input type="file" id="bgFileInput" accept="image/*" class="hidden" onchange="cargarImagenFondo(event)">
+      <button onclick="document.getElementById('bgFileInput').click()" class="w-full py-3 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-image text-blue-400 text-base"></i>
+        <span>Elegir Imagen de Fondo</span>
+      </button>
+    </div>
+
+    <div>
+      <label class="text-xs font-semibold text-slate-400 block mb-2">Color de Burbuja de Mensajes</label>
+      <input type="color" id="bubbleColorPicker" value="#2563eb" onchange="document.documentElement.style.setProperty('--bubble-color', this.value)" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
+    </div>
+  </div>
+
+  <!-- BARRA INFERIOR DE ENTRADA DE TEXTO, AUDIOS Y ARCHIVOS -->
+  <footer class="bg-slate-900 border-t border-slate-800 p-3 flex items-center space-x-2 shrink-0 z-40">
+    <!-- Seleccionar Imagen/Archivo -->
+    <input type="file" id="fileInput" class="hidden" onchange="enviarArchivo(event)">
+    <button onclick="document.getElementById('fileInput').click()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 active:scale-95 shrink-0">
+      <i class="fa-solid fa-paperclip"></i>
+    </button>
+
+    <!-- Campo de Texto -->
+    <input type="text" id="chatInput" placeholder="Escribe un mensaje..." class="flex-1 bg-slate-800 border border-slate-700 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500">
+
+    <!-- Botón Nota de Voz / Grabador -->
+    <button id="btnAudioRec" onclick="alternarGrabacionAudio()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 active:scale-95 shrink-0">
+      <i class="fa-solid fa-microphone" id="micIcon"></i>
+    </button>
+
+    <!-- Botón Enviar -->
+    <button onclick="enviarMensajeTexto()" class="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white active:scale-95 shrink-0">
+      <i class="fa-solid fa-paper-plane"></i>
+    </button>
+  </footer>
+
   <audio id="remoteAudio" autoplay></audio>
 
-  <!-- NAVEGACIÓN INFERIOR FIJA -->
-  <nav class="glass-header border-t border-slate-800 flex justify-around py-3 shrink-0 z-50">
-    <button onclick="cambiarPestana('walkie')" id="nav-walkie" class="flex flex-col items-center text-blue-500">
-      <i class="fa-solid fa-walkie-talkie text-lg"></i>
-      <span class="text-[10px] mt-1 font-semibold">Walkie</span>
-    </button>
-    <button onclick="cambiarPestana('video')" id="nav-video" class="flex flex-col items-center text-slate-400">
-      <i class="fa-solid fa-video text-lg"></i>
-      <span class="text-[10px] mt-1 font-semibold">Video Vivo</span>
-    </button>
-    <button onclick="cambiarPestana('chat')" id="nav-chat" class="flex flex-col items-center text-slate-400">
-      <i class="fa-solid fa-comments text-lg"></i>
-      <span class="text-[10px] mt-1 font-semibold">Chat & AI</span>
-    </button>
-    <button onclick="cambiarPestana('settings')" id="nav-settings" class="flex flex-col items-center text-slate-400">
-      <i class="fa-solid fa-sliders text-lg"></i>
-      <span class="text-[10px] mt-1 font-semibold">Ajustes</span>
-    </button>
-  </nav>
-
-  <!-- SCRIPT LÓGICO COMPLETO -->
+  <!-- LÓGICA DE INTERACCIÓN -->
   <script>
-    // Configuración general y PeerJS
-    const SALA_ID = "walkie-talkie-canal-global-98765";
     const GEMINI_API_KEY = "AQ.Ab8RN6KNIa1OmnCAUp-LlXOUHfIWhLuacpMK7kXzccoDCt77_Q";
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
-    let peer = null;
-    let localStream = null;
-    let activeCall = null;
-    let isVideoActive = false;
-
-    // Referencias DOM
-    const statusText = document.getElementById('statusText');
-    const btnTalk = document.getElementById('btnTalk');
-    const btnTalkText = document.getElementById('btnTalkText');
-    const remoteAudio = document.getElementById('remoteAudio');
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const videoPlaceholder = document.getElementById('videoPlaceholder');
-
-    // Registrar Service Worker dinámico para PWA
+    // Registrar Service Worker para habilitar PWA
     if ('serviceWorker' in navigator) {
-      const swCode = `
-        self.addEventListener('install', e => self.skipWaiting());
-        self.addEventListener('activate', e => self.clients.claim());
-        self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
-      `;
-      const blob = new Blob([swCode], { type: 'application/javascript' });
-      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+      navigator.serviceWorker.register('./manifest.json').catch(() => {});
     }
 
-    // Inicializar Permisos
-    async function solicitarPermisos() {
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        // Desactivar pistas inicialmente
-        localStream.getAudioTracks().forEach(t => t.enabled = false);
-        localStream.getVideoTracks().forEach(t => t.enabled = false);
-        localVideo.srcObject = localStream;
-        
-        statusText.innerText = "Permisos concedidos. Conectando...";
-        iniciarPeerJS();
-      } catch (err) {
-        statusText.innerText = "Error: Otorga acceso a Micro/Cámara.";
-      }
-    }
-
-    // Lógica PeerJS para reconexión bidireccional estable
-    function iniciarPeerJS() {
-      peer = new Peer(SALA_ID);
-
-      peer.on('open', () => {
-        statusText.innerText = "Modo Anfitrión (Host) listo.";
-        activarBotonTalk();
-      });
-
-      peer.on('call', (call) => {
-        activeCall = call;
-        call.answer(localStream);
-        
-        call.on('stream', (remoteStream) => {
-          remoteAudio.srcObject = remoteStream;
-          remoteVideo.srcObject = remoteStream;
-          videoPlaceholder.classList.add('hidden');
-          activarBotonTalk();
-        });
-      });
-
-      peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          // Si el ID de host está ocupado, actuar como cliente
-          conectarComoCliente();
-        } else {
-          setTimeout(iniciarPeerJS, 3000);
-        }
-      });
-    }
-
-    function conectarComoCliente() {
-      peer = new Peer();
-      peer.on('open', () => {
-        statusText.innerText = "Conectando con Host...";
-        const call = peer.call(SALA_ID, localStream);
-        
-        if (call) {
-          activeCall = call;
-          call.on('stream', (remoteStream) => {
-            remoteAudio.srcObject = remoteStream;
-            remoteVideo.srcObject = remoteStream;
-            videoPlaceholder.classList.add('hidden');
-            activarBotonTalk();
-          });
-        }
-      });
-    }
-
-    function activarBotonTalk() {
-      statusText.innerText = "Conectado. Listo para hablar.";
-      btnTalkText.innerText = "MANTÉN PARA HABLAR";
-      btnTalk.disabled = false;
-    }
-
-    // Eventos Walkie Talkie (Push to Talk)
-    function transmitir() {
-      if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = true);
-        btnTalkText.innerText = "TRANSMITIENDO...";
-        btnTalk.classList.replace('bg-red-600', 'bg-emerald-600');
-      }
-    }
-
-    function detener() {
-      if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = false);
-        btnTalkText.innerText = "MANTÉN PARA HABLAR";
-        btnTalk.classList.replace('bg-emerald-600', 'bg-red-600');
-      }
-    }
-
-    btnTalk.addEventListener('mousedown', transmitir);
-    btnTalk.addEventListener('mouseup', detener);
-    btnTalk.addEventListener('touchstart', (e) => { e.preventDefault(); transmitir(); });
-    btnTalk.addEventListener('touchend', (e) => { e.preventDefault(); detener(); });
-
-    // Alternar Videollamada
-    function iniciarVideoLlamada() {
-      if (!localStream) return;
-      isVideoActive = !isVideoActive;
-      
-      localStream.getVideoTracks().forEach(t => t.enabled = isVideoActive);
-      
-      if (isVideoActive) {
-        document.getElementById('btnToggleVideo').classList.replace('bg-emerald-600', 'bg-red-600');
-        document.getElementById('btnToggleVideo').querySelector('span').innerText = "Detener Video";
-      } else {
-        document.getElementById('btnToggleVideo').classList.replace('bg-red-600', 'bg-emerald-600');
-        document.getElementById('btnToggleVideo').querySelector('span').innerText = "Transmitir Video";
-      }
-    }
-
-    // Cambiar Pestañas de Navegación
-    function cambiarPestana(tab) {
-      ['walkie', 'video', 'chat', 'settings'].forEach(t => {
-        document.getElementById(`tab-${t}`).classList.add('hidden');
-        document.getElementById(`nav-${t}`).classList.replace('text-blue-500', 'text-slate-400');
-      });
-
-      document.getElementById(`tab-${tab}`).classList.remove('hidden');
-      document.getElementById(`nav-${tab}`).classList.replace('text-slate-400', 'text-blue-500');
-    }
-
-    // Generar Paleta de 12 Colores
-    const colores = ['#0f172a', '#1e293b', '#111827', '#0284c7', '#0d9488', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed', '#c026d3', '#475569', '#000000'];
-    const colorGrid = document.getElementById('colorGrid');
-    colores.forEach(c => {
-      const btn = document.createElement('button');
-      btn.className = "w-full h-8 rounded-lg border border-slate-700 shadow-sm";
-      btn.style.backgroundColor = c;
-      btn.onclick = () => {
-        document.getElementById('mainContainer').style.backgroundImage = 'none';
-        document.getElementById('mainContainer').style.backgroundColor = c;
-      };
-      colorGrid.appendChild(btn);
-    });
-
-    function cargarImagenFondo(e) {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          document.getElementById('mainContainer').style.backgroundImage = `url(${event.target.result})`;
-        };
-        reader.readAsDataURL(file);
-      }
-    }
-
-    function cambiarColorBurbuja(val) {
-      document.documentElement.style.setProperty('--bubble-color', val);
-    }
-
-    function cambiarColorFuente(val) {
-      document.documentElement.style.setProperty('--font-color', val);
-    }
-
-    // Envío de Chat & Asistente Gemini AI
-    async function enviarMensaje() {
+    // Enviar Mensaje de Texto
+    async function enviarMensajeTexto() {
       const input = document.getElementById('chatInput');
       const text = input.value.trim();
       if (!text) return;
 
-      const chatContainer = document.getElementById('chatMessages');
-
-      // Mensaje del Usuario
-      const userMsg = document.createElement('div');
-      userMsg.className = "flex justify-end";
-      userMsg.innerHTML = `<div class="bubble-sent p-3 rounded-2xl max-w-[80%] text-sm shadow">${text}</div>`;
-      chatContainer.appendChild(userMsg);
-
+      agregarBurbuja(text, 'sent');
       input.value = '';
-      chatContainer.scrollTop = chatContainer.scrollHeight;
 
-      // Respuesta de Gemini AI
+      // Consulta automática a Gemini AI
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
@@ -396,21 +184,110 @@
         });
         const data = await res.json();
         const reply = data.candidates[0].content.parts[0].text;
-
-        const aiMsg = document.createElement('div');
-        aiMsg.className = "flex justify-start";
-        aiMsg.innerHTML = `
-          <div class="bubble-received p-3 rounded-2xl max-w-[80%] text-sm shadow">
-            <p class="font-bold text-xs text-amber-400 mb-1">Asistente IA Gemini</p>
-            ${reply}
-          </div>`;
-        chatContainer.appendChild(aiMsg);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-      } catch (err) {}
+        agregarBurbuja(reply, 'received', 'IA Gemini');
+      } catch (e) {}
     }
 
-    // Autoejecutar petición de permisos
-    solicitarPermisos();
+    function agregarBurbuja(contenido, tipo, emisor = null) {
+      const chat = document.getElementById('chatContainer');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex ${tipo === 'sent' ? 'justify-end' : 'justify-start'}`;
+
+      if (tipo === 'sent') {
+        msgDiv.innerHTML = `<div class="bubble-sent p-3 rounded-2xl rounded-tr-none max-w-[80%] text-sm shadow-md">${contenido}</div>`;
+      } else {
+        msgDiv.innerHTML = `
+          <div class="bg-slate-800 border border-slate-700 p-3 rounded-2xl rounded-tl-none max-w-[80%] text-sm shadow-md">
+            ${emisor ? `<p class="font-bold text-xs text-amber-400 mb-1">${emisor}</p>` : ''}
+            ${contenido}
+          </div>`;
+      }
+
+      chat.appendChild(msgDiv);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Enviar Imagen o Archivo
+    function enviarArchivo(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        if (file.type.startsWith('image/')) {
+          agregarBurbuja(`<img src="${event.target.result}" class="rounded-lg max-w-full h-auto mb-1">`, 'sent');
+        } else {
+          agregarBurbuja(`<i class="fa-solid fa-file mr-2"></i> Documento: ${file.name}`, 'sent');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Grabar Notas de Voz
+    async function alternarGrabacionAudio() {
+      const btn = document.getElementById('btnAudioRec');
+      const micIcon = document.getElementById('micIcon');
+
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(audioChunks, { type: 'audio/mp3' });
+            const audioUrl = URL.createObjectURL(blob);
+            agregarBurbuja(`<audio controls src="${audioUrl}" class="w-full max-w-[200px]"></audio>`, 'sent');
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          btn.classList.replace('bg-slate-800', 'bg-red-600');
+          micIcon.classList.replace('text-slate-400', 'text-white');
+        } catch (err) {}
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        btn.classList.replace('bg-red-600', 'bg-slate-800');
+        micIcon.classList.replace('text-white', 'text-slate-400');
+      }
+    }
+
+    // Modales y Vistas
+    function toggleWalkieModal() {
+      const modal = document.getElementById('walkieModal');
+      modal.classList.toggle('hidden');
+      modal.classList.toggle('flex');
+    }
+
+    function toggleAjustes() {
+      const modal = document.getElementById('ajustesModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function abrirModoVideo() {
+      const modal = document.getElementById('videoModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function cerrarVideo() {
+      const modal = document.getElementById('videoModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function cargarImagenFondo(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          document.getElementById('chatContainer').style.backgroundImage = `url(${evt.target.result})`;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
   </script>
 </body>
 </html>
