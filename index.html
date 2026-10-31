@@ -2,713 +2,415 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Walkie-Talkie & Live Chat Studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
+  <title>Walkie-Talkie & Chat Pro</title>
 
-  <!-- Tailwind CSS -->
+  <!-- PWA Manifest inyectado directamente para permitir la instalación -->
+  <link rel="manifest" href='data:application/manifest+json,{"name":"Walkie Talkie Pro","short_name":"WalkieTalkie","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3616/3616930.png","sizes":"512x512","type":"image/png"}]}'>
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tailwind CSS & FontAwesome -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <!-- PeerJS -->
+  
+  <!-- PeerJS para Audio/Video RTC -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
-  <!-- Firebase CDN (Compat Modules) -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-
   <style>
-    /* Estilos personalizados y utilidades de UI */
     body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       touch-action: manipulation;
-      user-select: none;
-      -webkit-user-select: none;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    
-    .glass-panel {
-      background: rgba(30, 30, 30, 0.75);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+    .glass-header {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
     }
-
-    /* Animación del botón Push-To-Talk */
-    .ptt-active {
-      box-shadow: 0 0 50px rgba(74, 222, 128, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.5) !important;
-      transform: scale(0.94);
-      background: linear-gradient(135deg, #22c55e, #15803d) !important;
+    .chat-bg {
+      background-size: cover;
+      background-position: center;
+      transition: background-image 0.3s ease;
     }
-
-    .ptt-pulse {
-      animation: ptt-glow 2s infinite;
+    /* Estilos dinámicos para burbujas de chat */
+    .bubble-sent {
+      background-color: var(--bubble-color, #2563eb);
+      color: var(--font-color, #ffffff);
     }
-
-    @keyframes ptt-glow {
-      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-      70% { box-shadow: 0 0 0 25px rgba(239, 68, 68, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-    }
-
-    /* Ocultar barra de desplazamiento */
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
+    .bubble-received {
+      background-color: #334155;
+      color: #ffffff;
     }
   </style>
 </head>
-<body class="bg-gray-950 text-white h-screen flex flex-col justify-between overflow-hidden">
+<body class="bg-slate-900 text-white h-screen flex flex-col justify-between overflow-hidden select-none" id="appBody">
 
-  <!-- FONDO CON PERSONALIZACIÓN DINÁMICA -->
-  <div id="app-background" class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-500" style="background-image: linear-gradient(to bottom, #0f172a, #020617);"></div>
-  <div class="fixed inset-0 z-0 bg-black/40 backdrop-blur-[2px]"></div>
-
-  <!-- CABECERA SUPERIOR / ESTADO -->
-  <header class="relative z-10 flex items-center justify-between p-4 glass-panel border-b border-white/10">
+  <!-- HEADER PRINCIPAL FIJO -->
+  <header class="glass-header border-b border-slate-800 p-4 flex items-center justify-between shrink-0 z-50">
     <div class="flex items-center space-x-3">
-      <div class="relative">
-        <div id="status-indicator" class="w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse"></div>
-        <div id="status-ping" class="absolute -inset-0.5 rounded-full bg-amber-500/50 animate-ping"></div>
-      </div>
+      <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse" id="statusDot"></div>
       <div>
-        <h1 class="text-base font-bold tracking-wide flex items-center gap-2">
-          <i class="fa-solid font-radio text-red-500"></i> Walkie-Talkie Studio
-        </h1>
-        <p id="status-text" class="text-xs text-amber-400 font-medium">Iniciando sistema...</p>
+        <h1 class="font-bold text-base leading-tight">Walkie-Talkie HD</h1>
+        <p class="text-xs text-slate-400" id="statusText">Iniciando sistema...</p>
       </div>
     </div>
-
-    <!-- Canal / Selector de Sala -->
-    <div class="flex items-center space-x-2">
-      <button onclick="copiarCanal()" title="Copiar ID de Sala" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition text-xs flex items-center gap-1.5">
-        <i class="fa-regular fa-copy"></i>
-        <span id="room-display-id" class="font-mono text-gray-300">SALA-1</span>
-      </button>
-      <button onclick="cambiarSala()" title="Cambiar Sala" class="p-2 rounded-lg bg-red-600/80 hover:bg-red-600 active:scale-95 transition text-xs">
-        <i class="fa-solid fa-arrows-rotate"></i>
-      </button>
-    </div>
+    <button onclick="solicitarPermisos()" class="text-xs bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg active:scale-95 transition">
+      <i class="fa-solid fa-key text-amber-400 mr-1"></i> Permisos
+    </button>
   </header>
 
-  <!-- CONTENIDO PRINCIPAL CAMBIANTE -->
-  <main class="relative z-10 flex-1 overflow-hidden relative">
+  <!-- CONTENIDO RECIPIENTE (PESTAÑAS) -->
+  <main class="flex-1 relative overflow-hidden chat-bg" id="mainContainer">
 
-    <!-- SECCIÓN 1: WALKIE TALKIE & LLAMADAS -->
-    <section id="tab-walkie" class="h-full flex flex-col justify-between items-center p-6 space-y-4">
-      
-      <!-- Panel de Control Superior -->
-      <div class="w-full max-w-sm flex items-center justify-around glass-panel p-3 rounded-2xl">
-        <button id="btn-toggle-mic" onclick="toggleMuteMic()" class="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition">
-          <div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-            <i class="fa-solid fa-microphone text-base" id="icon-mic"></i>
-          </div>
-          <span class="text-[10px]">Mic</span>
-        </button>
-
-        <button onclick="iniciarLlamadaVideo()" class="flex flex-col items-center gap-1 text-emerald-400 hover:text-emerald-300 transition">
-          <div class="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-            <i class="fa-solid fa-video text-lg"></i>
-          </div>
-          <span class="text-[10px] font-bold">Video Vivo</span>
-        </button>
-
-        <button id="btn-wake-lock" onclick="solicitarWakeLock(true)" class="flex flex-col items-center gap-1 text-amber-400 hover:text-amber-300 transition">
-          <div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-            <i class="fa-solid fa-lock text-base" id="icon-wakelock"></i>
-          </div>
-          <span class="text-[10px]">Mantener ON</span>
-        </button>
+    <!-- SECCIÓN 1: WALKIE-TALKIE (PUSH TO TALK) -->
+    <section id="tab-walkie" class="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-6">
+      <div class="text-center space-y-1">
+        <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Canal de Voz Bidireccional</p>
+        <h2 class="text-xl font-bold text-slate-200">Presiona para Transmitir</h2>
       </div>
 
-      <!-- BOTÓN PRINCIPAL PTT (PUSH-TO-TALK) -->
-      <div class="flex-1 flex flex-col items-center justify-center my-auto">
-        <div class="relative">
-          <button id="ptt-button" disabled
-            class="w-56 h-56 rounded-full bg-gradient-to-br from-red-600 to-red-800 text-white font-extrabold text-xl shadow-2xl flex flex-col items-center justify-center gap-3 border-4 border-red-500/30 transition duration-150 ptt-pulse disabled:opacity-40 disabled:cursor-not-allowed">
-            <i class="fa-solid fa-walkie-talkie text-5xl mb-1"></i>
-            <span id="ptt-label" class="tracking-widest uppercase text-sm">CONECTANDO...</span>
-          </button>
-        </div>
-        <p class="text-xs text-gray-400 mt-4 text-center max-w-xs">
-          Mantén presionado para hablar en tiempo real. Suelta para escuchar.
-        </p>
-      </div>
+      <button id="btnTalk" disabled class="w-52 h-52 rounded-full bg-red-600 border-8 border-red-950 flex flex-col items-center justify-center shadow-2xl shadow-red-900/50 active:scale-95 disabled:opacity-40 disabled:bg-slate-700 disabled:border-slate-800 transition-all duration-150">
+        <i class="fa-solid fa-microphone text-5xl mb-2"></i>
+        <span class="font-bold text-sm tracking-wider" id="btnTalkText">CONECTANDO...</span>
+      </button>
 
-      <!-- Indicador de señal / Audio remoto oculto -->
-      <audio id="remoteAudio" autoplay></audio>
-      <audio id="localAudioEcho" muted autoplay></audio>
+      <div class="bg-slate-800/80 backdrop-filter blur-md px-4 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 flex items-center space-x-2">
+        <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+        <span>Canal Directo WebRTC Activo</span>
+      </div>
     </section>
 
-    <!-- SECCIÓN 2: CHAT SINCRO & GEMINI AI -->
-    <section id="tab-chat" class="h-full flex-col hidden p-4">
-      <div class="glass-panel flex-1 rounded-2xl flex flex-col overflow-hidden border border-white/10">
+    <!-- SECCIÓN 2: VIDEOLLAMADA EN VIVO -->
+    <section id="tab-video" class="absolute inset-0 hidden bg-slate-950 flex flex-col p-4 space-y-4">
+      <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
+        <!-- Video Remoto (El otro usuario) -->
+        <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
         
-        <!-- Header del Chat -->
-        <div class="p-3 border-b border-white/10 flex items-center justify-between bg-black/30">
-          <div class="flex items-center gap-2">
-            <i class="fa-solid fa-comments text-emerald-400"></i>
-            <span class="text-sm font-bold">Chat de Sala</span>
-          </div>
-          <button onclick="preguntarGeminiAI()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded-full text-xs font-semibold flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Consultar Gemini AI
-          </button>
+        <!-- Video Local (Tu cámara flotante) -->
+        <div class="absolute bottom-3 right-3 w-28 h-40 rounded-xl overflow-hidden border-2 border-slate-700 shadow-xl bg-black">
+          <video id="localVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
         </div>
 
-        <!-- Mensajes del Chat -->
-        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 no-scrollbar text-sm">
-          <div class="text-center text-xs text-gray-500 my-2">-- Inicio del Historial de la Sala --</div>
+        <div id="videoPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-slate-500">
+          <i class="fa-solid fa-video-slash text-4xl mb-2"></i>
+          <p class="text-xs">Cámara apagada</p>
         </div>
+      </div>
 
-        <!-- Grabador de Audio / Input Form -->
-        <div class="p-3 border-t border-white/10 bg-black/40 flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500">
-            
-            <button id="btn-audio-note" onclick="toggleGrabarNotaVoz()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-300 transition">
-              <i class="fa-solid fa-microphone" id="icon-audio-note"></i>
-            </button>
-
-            <button onclick="enviarMensajeTexto()" class="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">
-              <i class="fa-solid fa-paper-plane"></i>
-            </button>
-          </div>
-        </div>
+      <div class="flex justify-center space-x-4 shrink-0">
+        <button onclick="alternarCamara()" class="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 active:scale-95">
+          <i class="fa-solid fa-camera-rotate"></i>
+        </button>
+        <button id="btnToggleVideo" onclick="iniciarVideoLlamada()" class="px-6 rounded-full bg-emerald-600 font-bold text-sm flex items-center space-x-2 active:scale-95">
+          <i class="fa-solid fa-video"></i>
+          <span>Transmitir Video</span>
+        </button>
       </div>
     </section>
 
-    <!-- SECCIÓN 3: PERSONALIZACIÓN & AJUSTES -->
-    <section id="tab-settings" class="h-full flex-col hidden p-4 overflow-y-auto no-scrollbar space-y-4">
-      <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-6">
-        <h2 class="text-lg font-bold border-b border-white/10 pb-2 flex items-center gap-2">
-          <i class="fa-solid fa-palette text-amber-400"></i> Personalización de Aplicación
-        </h2>
-
-        <!-- 1. Fondo de Pantalla -->
-        <div class="space-y-3">
-          <label class="text-sm font-semibold text-gray-300 block">Fondo de Pantalla (Colores / Galería)</label>
-          <div class="grid grid-cols-4 gap-2">
-            <button onclick="setBgGradient('linear-gradient(to bottom, #0f172a, #020617)')" class="h-10 rounded-lg bg-slate-900 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #1e1b4b, #0f172a)')" class="h-10 rounded-lg bg-indigo-950 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #064e3b, #022c22)')" class="h-10 rounded-lg bg-emerald-950 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #7f1d1d, #450a0a)')" class="h-10 rounded-lg bg-red-950 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #581c87, #2e1065)')" class="h-10 rounded-lg bg-purple-950 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #831843, #500724)')" class="h-10 rounded-lg bg-pink-950 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(to bottom, #1c1917, #0c0a09)')" class="h-10 rounded-lg bg-stone-900 border border-white/20"></button>
-            <button onclick="setBgGradient('linear-gradient(135deg, #059669, #1e3a8a)')" class="h-10 rounded-lg bg-gradient-to-r from-emerald-600 to-blue-900 border border-white/20"></button>
-          </div>
-          <div class="pt-2">
-            <label class="w-full flex items-center justify-center gap-2 p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-dashed border-white/20 cursor-pointer text-xs text-gray-300">
-              <i class="fa-solid fa-image text-amber-400"></i> Cargar imagen desde Galería
-              <input type="file" accept="image/*" class="hidden" onchange="cargarImagenFondo(event)">
-            </label>
+    <!-- SECCIÓN 3: CHAT & GEMINI AI -->
+    <section id="tab-chat" class="absolute inset-0 hidden flex flex-col p-4">
+      <div id="chatMessages" class="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div class="flex justify-start">
+          <div class="bubble-received p-3 rounded-2xl max-w-[80%] text-sm shadow">
+            <p class="font-bold text-xs text-amber-400 mb-1">Asistente IA Gemini</p>
+            ¡Hola! Estoy listo para ayudarte. Escribe tu mensaje o pregunta.
           </div>
         </div>
+      </div>
 
-        <!-- 2. Personalización del Chat -->
-        <div class="space-y-3 pt-2">
-          <label class="text-sm font-semibold text-gray-300 block">Burbuja del Chat Propio</label>
-          <div class="flex gap-3">
-            <button onclick="setBubbleColor('bg-emerald-600')" class="w-8 h-8 rounded-full bg-emerald-600 ring-2 ring-white/20"></button>
-            <button onclick="setBubbleColor('bg-indigo-600')" class="w-8 h-8 rounded-full bg-indigo-600 ring-2 ring-white/20"></button>
-            <button onclick="setBubbleColor('bg-rose-600')" class="w-8 h-8 rounded-full bg-rose-600 ring-2 ring-white/20"></button>
-            <button onclick="setBubbleColor('bg-amber-600')" class="w-8 h-8 rounded-full bg-amber-600 ring-2 ring-white/20"></button>
-          </div>
+      <!-- Barra de Entrada de Chat -->
+      <div class="mt-3 flex items-center space-x-2 shrink-0">
+        <input type="text" id="chatInput" placeholder="Escribe un mensaje o consulta a Gemini..." class="flex-1 bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
+        <button onclick="enviarMensaje()" class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white active:scale-95 shrink-0">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 4: AJUSTES Y PERSONALIZACIÓN -->
+    <section id="tab-settings" class="absolute inset-0 hidden p-6 overflow-y-auto space-y-6">
+      <h2 class="text-lg font-bold text-slate-200 border-b border-slate-800 pb-2">Personalización de App</h2>
+
+      <!-- Colores de Fondo -->
+      <div class="space-y-2">
+        <label class="text-xs font-semibold text-slate-400">Color de Fondo Solido (12 Opciones)</label>
+        <div class="grid grid-cols-6 gap-2" id="colorGrid"></div>
+      </div>
+
+      <!-- Imagen de Galería -->
+      <div class="space-y-2">
+        <label class="text-xs font-semibold text-slate-400">Fondo con Imagen de Galería</label>
+        <input type="file" id="bgFileInput" accept="image/*" class="hidden" onchange="cargarImagenFondo(event)">
+        <button onclick="document.getElementById('bgFileInput').click()" class="w-full py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 active:scale-95">
+          <i class="fa-solid fa-image text-blue-400"></i>
+          <span>Seleccionar Foto de la Galería</span>
+        </button>
+      </div>
+
+      <!-- Personalización de Chat -->
+      <div class="space-y-4 border-t border-slate-800 pt-4">
+        <div>
+          <label class="text-xs font-semibold text-slate-400 block mb-1">Color de Burbuja enviada</label>
+          <input type="color" id="bubbleColorPicker" value="#2563eb" onchange="cambiarColorBurbuja(this.value)" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
         </div>
-
-        <!-- 3. Tipografía -->
-        <div class="space-y-2 pt-2">
-          <label class="text-sm font-semibold text-gray-300 block">Estilo de Fuente</label>
-          <select onchange="setFontFamily(this.value)" class="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-sm text-white focus:outline-none">
-            <option value="sans-serif">Predeterminada (Sans-Serif)</option>
-            <option value="monospace">Monospaciada (Terminal)</option>
-            <option value="serif">Elegante (Serif)</option>
-            <option value="cursive">Manuscrita (Cursive)</option>
-          </select>
+        <div>
+          <label class="text-xs font-semibold text-slate-400 block mb-1">Color de Letra de Chat</label>
+          <input type="color" id="fontColorPicker" value="#ffffff" onchange="cambiarColorFuente(this.value)" class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer">
         </div>
-
       </div>
     </section>
 
   </main>
 
-  <!-- NAVEGACIÓN INFERIOR (TABS) -->
-  <nav class="relative z-10 glass-panel border-t border-white/10 px-6 py-3 flex justify-around items-center">
-    <button onclick="switchTab('walkie')" id="nav-walkie" class="flex flex-col items-center gap-1 text-red-500 font-bold transition">
-      <i class="fa-solid fa-walkie-talkie text-xl"></i>
-      <span class="text-[10px]">Walkie</span>
+  <!-- ELEMENTOS DE AUDIO OCULTOS -->
+  <audio id="remoteAudio" autoplay></audio>
+
+  <!-- NAVEGACIÓN INFERIOR FIJA -->
+  <nav class="glass-header border-t border-slate-800 flex justify-around py-3 shrink-0 z-50">
+    <button onclick="cambiarPestana('walkie')" id="nav-walkie" class="flex flex-col items-center text-blue-500">
+      <i class="fa-solid fa-walkie-talkie text-lg"></i>
+      <span class="text-[10px] mt-1 font-semibold">Walkie</span>
     </button>
-    <button onclick="switchTab('chat')" id="nav-chat" class="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition">
-      <i class="fa-solid fa-comments text-xl"></i>
-      <span class="text-[10px]">Chat & AI</span>
+    <button onclick="cambiarPestana('video')" id="nav-video" class="flex flex-col items-center text-slate-400">
+      <i class="fa-solid fa-video text-lg"></i>
+      <span class="text-[10px] mt-1 font-semibold">Video Vivo</span>
     </button>
-    <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition">
-      <i class="fa-solid fa-sliders text-xl"></i>
-      <span class="text-[10px]">Ajustes</span>
+    <button onclick="cambiarPestana('chat')" id="nav-chat" class="flex flex-col items-center text-slate-400">
+      <i class="fa-solid fa-comments text-lg"></i>
+      <span class="text-[10px] mt-1 font-semibold">Chat & AI</span>
+    </button>
+    <button onclick="cambiarPestana('settings')" id="nav-settings" class="flex flex-col items-center text-slate-400">
+      <i class="fa-solid fa-sliders text-lg"></i>
+      <span class="text-[10px] mt-1 font-semibold">Ajustes</span>
     </button>
   </nav>
 
-  <!-- MODAL DE VIDEOLLAMADA EN VIVO -->
-  <div id="video-modal" class="fixed inset-0 z-50 bg-black/95 hidden flex-col justify-between p-4">
-    <!-- Header Video -->
-    <div class="flex items-center justify-between z-10">
-      <span class="text-xs font-bold bg-red-600/80 px-3 py-1 rounded-full animate-pulse">
-        <i class="fa-solid fa-record-vinyl"></i> TRANSMISIÓN EN VIVO
-      </span>
-      <button onclick="cerrarVideoLlamada()" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-    </div>
-
-    <!-- Contenedor Streams de Video -->
-    <div class="relative flex-1 my-4 rounded-2xl overflow-hidden bg-gray-900 border border-white/10 flex items-center justify-center">
-      <!-- Remote Video (Full Screen) -->
-      <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
-      
-      <!-- Local Video (Pip) -->
-      <div class="absolute bottom-4 right-4 w-32 h-44 rounded-xl overflow-hidden border-2 border-white/30 shadow-2xl bg-black">
-        <video id="localVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
-      </div>
-    </div>
-
-    <!-- Controls Video -->
-    <div class="flex justify-center items-center gap-6 py-2 z-10">
-      <button onclick="toggleCamaraLocal()" class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white">
-        <i class="fa-solid fa-camera-rotate"></i>
-      </button>
-      <button onclick="cerrarVideoLlamada()" class="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-red-600/40">
-        <i class="fa-solid fa-phone-slash"></i>
-      </button>
-    </div>
-  </div>
-
-  <!-- SCRIPT DE LÓGICA DE APLICACIÓN -->
+  <!-- SCRIPT LÓGICO COMPLETO -->
   <script>
-    // -------------------------------------------------------------
-    // CONFIGURACIÓN DE APIS Y CLAVES
-    // -------------------------------------------------------------
-    const firebaseConfig = {
-      apiKey: "AIzaSyBSxOrPsgmNuiKwfD3OFCQQ6pQt6_LiNp8",
-      authDomain: "ejemplos-6f88c.firebaseapp.com",
-      projectId: "ejemplos-6f88c",
-      storageBucket: "ejemplos-6f88c.firebasestorage.app",
-      messagingSenderId: "438611965929",
-      appId: "1:438611965929:web:87eadb58e6dfff59f9fd78",
-      measurementId: "G-YML1J9BX45"
-    };
+    // Configuración general y PeerJS
+    const SALA_ID = "walkie-talkie-canal-global-98765";
+    const GEMINI_API_KEY = "AQ.Ab8RN6KNIa1OmnCAUp-LlXOUHfIWhLuacpMK7kXzccoDCt77_Q";
 
-    // Geminis API key incluida por el usuario
-    const GEMINI_API_KEY = ""; // Canvas proveerá la autenticación si se deja vacía o con la del usuario
-
-    // Inicializar Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // -------------------------------------------------------------
-    // VARIABLES DE ESTADO Y WEBRTC
-    // -------------------------------------------------------------
-    let ROOM_ID = localStorage.getItem('walkie_room_id') || "SALA-PRIVADA-100";
     let peer = null;
     let localStream = null;
-    let localVideoStream = null;
     let activeCall = null;
-    let wakeLock = null;
-    let userBubbleColor = "bg-emerald-600";
-    
-    // Grabación de nota de voz
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let isRecordingAudio = false;
+    let isVideoActive = false;
 
-    // Elementos del DOM
-    const statusText = document.getElementById('status-text');
-    const statusIndicator = document.getElementById('status-indicator');
-    const pttButton = document.getElementById('ptt-button');
-    const pttLabel = document.getElementById('ptt-label');
-    const roomDisplay = document.getElementById('room-display-id');
-    const chatMessages = document.getElementById('chat-messages');
+    // Referencias DOM
+    const statusText = document.getElementById('statusText');
+    const btnTalk = document.getElementById('btnTalk');
+    const btnTalkText = document.getElementById('btnTalkText');
+    const remoteAudio = document.getElementById('remoteAudio');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const videoPlaceholder = document.getElementById('videoPlaceholder');
 
-    roomDisplay.innerText = ROOM_ID;
-
-    // -------------------------------------------------------------
-    // 1. GESTIÓN DE AUDIO Y WEBRTC (WALKIE-TALKIE)
-    // -------------------------------------------------------------
-    async function solicitarWakeLock(manual = false) {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          document.getElementById('icon-wakelock').className = "fa-solid fa-lock text-amber-400";
-          if (manual) alert('Pantalla encendida permanente activada.');
-        }
-      } catch (err) {}
+    // Registrar Service Worker dinámico para PWA
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => self.clients.claim());
+        self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
     }
 
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-      .then((stream) => {
-        localStream = stream;
-        // Iniciar silenciado por defecto para Push to Talk
-        localStream.getAudioTracks()[0].enabled = false;
-        solicitarWakeLock();
-        iniciarConexionPeer();
-      })
-      .catch((err) => {
-        statusText.innerText = "Error: Acceso a Micrófono Requerido";
-        statusIndicator.className = "w-3.5 h-3.5 rounded-full bg-red-600";
-      });
+    // Inicializar Permisos
+    async function solicitarPermisos() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        // Desactivar pistas inicialmente
+        localStream.getAudioTracks().forEach(t => t.enabled = false);
+        localStream.getVideoTracks().forEach(t => t.enabled = false);
+        localVideo.srcObject = localStream;
+        
+        statusText.innerText = "Permisos concedidos. Conectando...";
+        iniciarPeerJS();
+      } catch (err) {
+        statusText.innerText = "Error: Otorga acceso a Micro/Cámara.";
+      }
+    }
 
-    function iniciarConexionPeer() {
-      // Intentar actuar como HOST utilizando la sala como ID
-      peer = new Peer(ROOM_ID + "-HOST");
+    // Lógica PeerJS para reconexión bidireccional estable
+    function iniciarPeerJS() {
+      peer = new Peer(SALA_ID);
 
       peer.on('open', () => {
-        setEstado('Conectado como Host. Esperando par...', 'bg-emerald-500');
-        escucharLlamadasInbound();
-        conectarFirebaseChat();
+        statusText.innerText = "Modo Anfitrión (Host) listo.";
+        activarBotonTalk();
+      });
+
+      peer.on('call', (call) => {
+        activeCall = call;
+        call.answer(localStream);
+        
+        call.on('stream', (remoteStream) => {
+          remoteAudio.srcObject = remoteStream;
+          remoteVideo.srcObject = remoteStream;
+          videoPlaceholder.classList.add('hidden');
+          activarBotonTalk();
+        });
       });
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-          // El Host ya existe, entrar como CLIENTE
-          iniciarComoCliente();
+          // Si el ID de host está ocupado, actuar como cliente
+          conectarComoCliente();
         } else {
-          setEstado('Reconectando canal...', 'bg-amber-500');
-          setTimeout(iniciarConexionPeer, 3000);
+          setTimeout(iniciarPeerJS, 3000);
         }
       });
     }
 
-    function iniciarComoCliente() {
-      peer = new Peer(); // ID Aleatorio
-
+    function conectarComoCliente() {
+      peer = new Peer();
       peer.on('open', () => {
-        setEstado('Conectado como Cliente. Enlazando...', 'bg-emerald-500');
-        llamarAlHost();
-        conectarFirebaseChat();
-      });
-
-      peer.on('error', (err) => {
-        setTimeout(iniciarComoCliente, 3000);
-      });
-    }
-
-    function llamarAlHost() {
-      const call = peer.call(ROOM_ID + "-HOST", localStream);
-      if (call) {
-        gestionarLlamada(call);
-      } else {
-        setTimeout(llamarAlHost, 3000);
-      }
-
-      peer.on('error', (err) => {
-        if (err.type === 'peer-unavailable') {
-          setTimeout(llamarAlHost, 3000);
-        }
-      });
-    }
-
-    function escucharLlamadasInbound() {
-      peer.on('call', (call) => {
-        call.answer(localStream);
-        gestionarLlamada(call);
-      });
-    }
-
-    function gestionarLlamada(call) {
-      if (activeCall) activeCall.close();
-      activeCall = call;
-
-      call.on('stream', (remoteStream) => {
-        const remoteAudio = document.getElementById('remoteAudio');
-        remoteAudio.srcObject = remoteStream;
-        habilitarPTT();
-      });
-
-      call.on('close', () => {
-        setEstado('Reconectando par...', 'bg-amber-500');
-        pttButton.disabled = true;
-      });
-    }
-
-    function habilitarPTT() {
-      setEstado('Conectado en Vivo', 'bg-emerald-500');
-      pttButton.disabled = false;
-      pttLabel.innerText = "MANTÉN PARA HABLAR";
-    }
-
-    function setEstado(msg, colorClass) {
-      statusText.innerText = msg;
-      statusIndicator.className = `w-3.5 h-3.5 rounded-full ${colorClass}`;
-    }
-
-    // -------------------------------------------------------------
-    // EVENTOS DE BOTÓN PTT (PUSH-TO-TALK)
-    // -------------------------------------------------------------
-    function hablarStart(e) {
-      if (e) e.preventDefault();
-      if (!localStream || pttButton.disabled) return;
-
-      localStream.getAudioTracks()[0].enabled = true;
-      pttButton.classList.add('ptt-active');
-      pttLabel.innerText = "TRANSMITIENDO...";
-      setEstado('Transmitiendo voz en vivo...', 'bg-red-500');
-    }
-
-    function hablarEnd(e) {
-      if (e) e.preventDefault();
-      if (!localStream) return;
-
-      localStream.getAudioTracks()[0].enabled = false;
-      pttButton.classList.remove('ptt-active');
-      pttLabel.innerText = "MANTÉN PARA HABLAR";
-      setEstado('En escucha activa', 'bg-emerald-500');
-    }
-
-    pttButton.addEventListener('mousedown', hablarStart);
-    pttButton.addEventListener('mouseup', hablarEnd);
-    pttButton.addEventListener('touchstart', hablarStart);
-    pttButton.addEventListener('touchend', hablarEnd);
-
-    function toggleMuteMic() {
-      const track = localStream.getAudioTracks()[0];
-      const icon = document.getElementById('icon-mic');
-      if (track.enabled) {
-        track.enabled = false;
-        icon.className = "fa-solid fa-microphone-slash text-red-400";
-      } else {
-        track.enabled = true;
-        icon.className = "fa-solid fa-microphone text-emerald-400";
-      }
-    }
-
-    // -------------------------------------------------------------
-    // 2. TRANSMISIÓN DE VIDEOLLAMADA
-    // -------------------------------------------------------------
-    async function iniciarLlamadaVideo() {
-      try {
-        localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        document.getElementById('localVideo').srcObject = localVideoStream;
-        document.getElementById('video-modal').classList.remove('hidden');
-        document.getElementById('video-modal').classList.add('flex');
-
-        if (peer && !activeCall) {
-          const call = peer.call(ROOM_ID + "-HOST", localVideoStream);
-          call.on('stream', (rStream) => {
-            document.getElementById('remoteVideo').srcObject = rStream;
+        statusText.innerText = "Conectando con Host...";
+        const call = peer.call(SALA_ID, localStream);
+        
+        if (call) {
+          activeCall = call;
+          call.on('stream', (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+            remoteVideo.srcObject = remoteStream;
+            videoPlaceholder.classList.add('hidden');
+            activarBotonTalk();
           });
         }
-      } catch (err) {
-        alert("No se pudo obtener acceso a la cámara.");
-      }
-    }
-
-    function cerrarVideoLlamada() {
-      if (localVideoStream) {
-        localVideoStream.getTracks().forEach(track => track.stop());
-      }
-      document.getElementById('video-modal').classList.add('hidden');
-      document.getElementById('video-modal').classList.remove('flex');
-    }
-
-    function toggleCamaraLocal() {
-      if (localVideoStream) {
-        const vTrack = localVideoStream.getVideoTracks()[0];
-        vTrack.enabled = !vTrack.enabled;
-      }
-    }
-
-    // -------------------------------------------------------------
-    // 3. FIREBASE CHAT REALTIME & NOTAS DE VOZ
-    // -------------------------------------------------------------
-    function conectarFirebaseChat() {
-      const messagesRef = db.ref('chats/' + ROOM_ID);
-      messagesRef.limitToLast(30).on('child_added', (snapshot) => {
-        const data = snapshot.val();
-        renderizarMensaje(data);
       });
     }
 
-    function enviarMensajeTexto() {
-      const input = document.getElementById('chat-input');
-      const text = input.value.trim();
-      if (!text) return;
-
-      const msgData = {
-        sender: peer.id || 'Usuario',
-        text: text,
-        type: 'text',
-        timestamp: Date.now()
-      };
-
-      db.ref('chats/' + ROOM_ID).push(msgData);
-      input.value = '';
+    function activarBotonTalk() {
+      statusText.innerText = "Conectado. Listo para hablar.";
+      btnTalkText.innerText = "MANTÉN PARA HABLAR";
+      btnTalk.disabled = false;
     }
 
-    function toggleGrabarNotaVoz() {
-      const icon = document.getElementById('icon-audio-note');
-      if (!isRecordingAudio) {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          mediaRecorder = new MediaRecorder(stream);
-          audioChunks = [];
-          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-          mediaRecorder.onstop = enviarNotaVoz;
-          mediaRecorder.start();
-          isRecordingAudio = true;
-          icon.className = "fa-solid fa-stop text-red-500 animate-pulse";
-        });
+    // Eventos Walkie Talkie (Push to Talk)
+    function transmitir() {
+      if (localStream) {
+        localStream.getAudioTracks().forEach(t => t.enabled = true);
+        btnTalkText.innerText = "TRANSMITIENDO...";
+        btnTalk.classList.replace('bg-red-600', 'bg-emerald-600');
+      }
+    }
+
+    function detener() {
+      if (localStream) {
+        localStream.getAudioTracks().forEach(t => t.enabled = false);
+        btnTalkText.innerText = "MANTÉN PARA HABLAR";
+        btnTalk.classList.replace('bg-emerald-600', 'bg-red-600');
+      }
+    }
+
+    btnTalk.addEventListener('mousedown', transmitir);
+    btnTalk.addEventListener('mouseup', detener);
+    btnTalk.addEventListener('touchstart', (e) => { e.preventDefault(); transmitir(); });
+    btnTalk.addEventListener('touchend', (e) => { e.preventDefault(); detener(); });
+
+    // Alternar Videollamada
+    function iniciarVideoLlamada() {
+      if (!localStream) return;
+      isVideoActive = !isVideoActive;
+      
+      localStream.getVideoTracks().forEach(t => t.enabled = isVideoActive);
+      
+      if (isVideoActive) {
+        document.getElementById('btnToggleVideo').classList.replace('bg-emerald-600', 'bg-red-600');
+        document.getElementById('btnToggleVideo').querySelector('span').innerText = "Detener Video";
       } else {
-        mediaRecorder.stop();
-        isRecordingAudio = false;
-        icon.className = "fa-solid fa-microphone";
+        document.getElementById('btnToggleVideo').classList.replace('bg-red-600', 'bg-emerald-600');
+        document.getElementById('btnToggleVideo').querySelector('span').innerText = "Transmitir Video";
       }
     }
 
-    function enviarNotaVoz() {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = () => {
-        const base64Audio = reader.result;
-        const msgData = {
-          sender: peer.id || 'Usuario',
-          audioUrl: base64Audio,
-          type: 'audio',
-          timestamp: Date.now()
-        };
-        db.ref('chats/' + ROOM_ID).push(msgData);
-      };
-    }
-
-    function renderizarMensaje(data) {
-      const isMe = data.sender === peer.id;
-      const div = document.createElement('div');
-      div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1`;
-
-      let contentHtml = '';
-      if (data.type === 'text') {
-        contentHtml = `<p class="break-words">${escapeHTML(data.text)}</p>`;
-      } else if (data.type === 'audio') {
-        contentHtml = `<audio controls src="${data.audioUrl}" class="h-8 max-w-[200px]"></audio>`;
-      }
-
-      const bubbleColor = isMe ? userBubbleColor : 'bg-white/10';
-
-      div.innerHTML = `
-        <div class="max-w-[80%] rounded-2xl px-4 py-2 text-white shadow-md ${bubbleColor}">
-          <span class="text-[9px] opacity-60 block font-mono">${isMe ? 'Tú' : 'Par'}</span>
-          ${contentHtml}
-        </div>
-      `;
-
-      chatMessages.appendChild(div);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function escapeHTML(str) {
-      return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-      );
-    }
-
-    // -------------------------------------------------------------
-    // 4. INTEGRACIÓN IA GEMINI (GEMINI-3-FLASH-PREVIEW)
-    // -------------------------------------------------------------
-    async function preguntarGeminiAI() {
-      const prompt = prompt("Escribe tu consulta para la IA Gemini:");
-      if (!prompt) return;
-
-      // Mensaje del usuario en Chat
-      db.ref('chats/' + ROOM_ID).push({
-        sender: peer.id,
-        text: `🤖 [Consulta IA]: ${prompt}`,
-        type: 'text',
-        timestamp: Date.now()
-      });
-
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: "Responde de forma concisa y útil en español." }] }
-          })
-        });
-
-        const result = await response.json();
-        const aiResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "No se obtuvo respuesta de la IA.";
-
-        db.ref('chats/' + ROOM_ID).push({
-          sender: "Gemini AI",
-          text: `✨ ${aiResponse}`,
-          type: 'text',
-          timestamp: Date.now()
-        });
-      } catch (err) {
-        alert("Error de conexión con Gemini AI.");
-      }
-    }
-
-    // -------------------------------------------------------------
-    // 5. PERSONALIZACIÓN DE UI Y NAVEGACIÓN
-    // -------------------------------------------------------------
-    function switchTab(tab) {
-      ['walkie', 'chat', 'settings'].forEach(t => {
+    // Cambiar Pestañas de Navegación
+    function cambiarPestana(tab) {
+      ['walkie', 'video', 'chat', 'settings'].forEach(t => {
         document.getElementById(`tab-${t}`).classList.add('hidden');
-        document.getElementById(`tab-${t}`).classList.remove('flex');
-        document.getElementById(`nav-${t}`).className = "flex flex-col items-center gap-1 text-gray-400 hover:text-white transition";
+        document.getElementById(`nav-${t}`).classList.replace('text-blue-500', 'text-slate-400');
       });
 
       document.getElementById(`tab-${tab}`).classList.remove('hidden');
-      document.getElementById(`tab-${tab}`).classList.add('flex');
-      document.getElementById(`nav-${tab}`).className = "flex flex-col items-center gap-1 text-red-500 font-bold transition";
+      document.getElementById(`nav-${tab}`).classList.replace('text-slate-400', 'text-blue-500');
     }
 
-    function setBgGradient(grad) {
-      const bg = document.getElementById('app-background');
-      bg.style.backgroundImage = grad;
-    }
+    // Generar Paleta de 12 Colores
+    const colores = ['#0f172a', '#1e293b', '#111827', '#0284c7', '#0d9488', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed', '#c026d3', '#475569', '#000000'];
+    const colorGrid = document.getElementById('colorGrid');
+    colores.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = "w-full h-8 rounded-lg border border-slate-700 shadow-sm";
+      btn.style.backgroundColor = c;
+      btn.onclick = () => {
+        document.getElementById('mainContainer').style.backgroundImage = 'none';
+        document.getElementById('mainContainer').style.backgroundColor = c;
+      };
+      colorGrid.appendChild(btn);
+    });
 
-    function cargarImagenFondo(event) {
-      const file = event.target.files[0];
+    function cargarImagenFondo(e) {
+      const file = e.target.files[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = e => {
-          document.getElementById('app-background').style.backgroundImage = `url(${e.target.result})`;
+        reader.onload = (event) => {
+          document.getElementById('mainContainer').style.backgroundImage = `url(${event.target.result})`;
         };
         reader.readAsDataURL(file);
       }
     }
 
-    function setBubbleColor(colorClass) {
-      userBubbleColor = colorClass;
-      alert("Color de burbuja guardado para los próximos mensajes.");
+    function cambiarColorBurbuja(val) {
+      document.documentElement.style.setProperty('--bubble-color', val);
     }
 
-    function setFontFamily(font) {
-      document.body.style.fontFamily = font;
+    function cambiarColorFuente(val) {
+      document.documentElement.style.setProperty('--font-color', val);
     }
 
-    function cambiarSala() {
-      const nuevaSala = prompt("Ingresa el nombre o clave de la sala:", ROOM_ID);
-      if (nuevaSala && nuevaSala !== ROOM_ID) {
-        localStorage.setItem('walkie_room_id', nuevaSala);
-        location.reload();
-      }
+    // Envío de Chat & Asistente Gemini AI
+    async function enviarMensaje() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatContainer = document.getElementById('chatMessages');
+
+      // Mensaje del Usuario
+      const userMsg = document.createElement('div');
+      userMsg.className = "flex justify-end";
+      userMsg.innerHTML = `<div class="bubble-sent p-3 rounded-2xl max-w-[80%] text-sm shadow">${text}</div>`;
+      chatContainer.appendChild(userMsg);
+
+      input.value = '';
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      // Respuesta de Gemini AI
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: text }] }] })
+        });
+        const data = await res.json();
+        const reply = data.candidates[0].content.parts[0].text;
+
+        const aiMsg = document.createElement('div');
+        aiMsg.className = "flex justify-start";
+        aiMsg.innerHTML = `
+          <div class="bubble-received p-3 rounded-2xl max-w-[80%] text-sm shadow">
+            <p class="font-bold text-xs text-amber-400 mb-1">Asistente IA Gemini</p>
+            ${reply}
+          </div>`;
+        chatContainer.appendChild(aiMsg);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      } catch (err) {}
     }
 
-    function copiarCanal() {
-      navigator.clipboard.writeText(ROOM_ID);
-      alert(`ID de sala copiado: ${ROOM_ID}`);
-    }
-
-    // Reactivar bloqueo de pantalla si regresa la visibilidad
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') solicitarWakeLock();
-    });
+    // Autoejecutar petición de permisos
+    solicitarPermisos();
   </script>
 </body>
 </html>
