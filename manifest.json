@@ -1,10 +1,10 @@
 {
-  "name": "Chat & Walkie Pro",
+  "name": "Chat Pro & Walkie",
   "short_name": "ChatPro",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#0b141a",
+  "theme_color": "#0b141a",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3616/3616930.png",
