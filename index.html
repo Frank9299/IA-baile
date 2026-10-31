@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walkie-Talkie Automático</title>
+  <title>Walkie-Talkie Reconexión Automática</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body {
@@ -60,15 +60,18 @@
 
   <div class="container">
     <h2>Walkie-Talkie</h2>
-    <p class="status" id="status">Iniciando conexión...</p>
+    <p class="status" id="status">Iniciando...</p>
     <button id="talkBtn" disabled>CONECTANDO...</button>
   </div>
 
   <audio id="remoteAudio" autoplay></audio>
 
   <script>
-    const SALA_ID = "mi-canal-walkietalkie-privado-12345";
-    
+    // DEFINE AQUÍ TU ROL: En un teléfono pon "telefono-1" y en el otro "telefono-2"
+    // (O usa dos enlaces diferentes en GitHub si prefieres tener una app para cada uno)
+    const MI_ID = "walkie-dispositivo-A-12345";
+    const OTRO_ID = "walkie-dispositivo-B-12345";
+
     let peer = null;
     let localStream = null;
     let activeCall = null;
@@ -78,15 +81,12 @@
     const talkBtn = document.getElementById('talkBtn');
     const remoteAudio = document.getElementById('remoteAudio');
 
-    // Evitar que la pantalla se apague mientras se usa la app
     async function solicitarWakeLock() {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen');
         }
-      } catch (err) {
-        console.log('Wake Lock no activado:', err.message);
-      }
+      } catch (err) {}
     }
 
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
@@ -94,46 +94,80 @@
         localStream = stream;
         localStream.getAudioTracks()[0].enabled = false;
         solicitarWakeLock();
-        iniciarConexion();
+        iniciarPeer();
       })
       .catch((err) => {
         statusEl.innerText = 'Error: Permite el acceso al micrófono.';
       });
 
-    function iniciarConexion() {
-      peer = new Peer(SALA_ID);
+    function iniciarPeer() {
+      statusEl.innerText = 'Conectando al sistema...';
+      
+      // Creamos el peer con un ID fijo propio
+      peer = new Peer(MI_ID);
 
       peer.on('open', () => {
-        statusEl.innerText = 'Esperando al otro teléfono...';
+        statusEl.innerText = 'Listo. Esperando o conectando...';
+        intentarConectarConElOtro();
       });
 
+      // Si el servidor rechaza el ID porque otra pestaña vieja sigue abierta, reintentamos en 3 segundos
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          statusEl.innerText = 'Reconectando sesión anterior...';
+          setTimeout(() => {
+            peer.destroy();
+            iniciarPeer();
+          }, 3000);
+        } else {
+          statusEl.innerText = 'Error: ' + err.type;
+        }
+      });
+
+      // Si el otro dispositivo nos llama
       peer.on('call', (call) => {
+        if (activeCall) activeCall.close();
         activeCall = call;
         call.answer(localStream);
-
+        
         call.on('stream', (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
           activarBoton();
         });
+
+        call.on('close', () => {
+          statusEl.innerText = 'El otro usuario se desconectó. Reintentando...';
+          talkBtn.disabled = true;
+          intentarConectarConElOtro();
+        });
       });
+    }
 
-      peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          peer = new Peer();
-
-          peer.on('open', () => {
-            statusEl.innerText = 'Conectando con el otro dispositivo...';
-            activeCall = peer.call(SALA_ID, localStream);
-
-            activeCall.on('stream', (remoteStream) => {
-              remoteAudio.srcObject = remoteStream;
-              activarBoton();
-            });
-          });
-        } else {
-          statusEl.innerText = 'Error de conexión: ' + err.type;
+    function intentarConectarConElOtro() {
+      // Intentamos llamar al otro dispositivo de forma automática
+      const callInterval = setInterval(() => {
+        if (activeCall && activeCall.open) {
+          clearInterval(callInterval);
+          return;
         }
-      });
+
+        statusEl.innerText = 'Buscando al otro dispositivo...';
+        const call = peer.call(OTRO_ID, localStream);
+
+        if (call) {
+          call.on('stream', (remoteStream) => {
+            remoteAudio.srcObject = remoteStream;
+            activeCall = call;
+            clearInterval(callInterval);
+            activarBoton();
+          });
+
+          call.on('close', () => {
+            statusEl.innerText = 'Conexión perdida. Reintentando...';
+            talkBtn.disabled = true;
+          });
+        }
+      }, 4000); // Reintenta cada 4 segundos automáticamente si no está conectado
     }
 
     function activarBoton() {
@@ -160,13 +194,6 @@
     talkBtn.addEventListener('mouseup', detener);
     talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); transmitir(); });
     talkBtn.addEventListener('touchend', (e) => { e.preventDefault(); detener(); });
-
-    // Reactivar el bloqueo de pantalla si el usuario minimiza y regresa a la app
-    document.addEventListener('visibilitychange', async () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        await solicitarWakeLock();
-      }
-    });
   </script>
 </body>
 </html>
