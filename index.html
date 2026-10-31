@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walkie-Talkie Definitivo</title>
+  <title>Walkie-Talkie Host</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body {
@@ -45,7 +45,6 @@
       user-select: none;
       -webkit-user-select: none;
       box-shadow: 0 6px 15px rgba(229, 57, 53, 0.4);
-      transition: transform 0.1s, background-color 0.2s;
     }
     #talkBtn:active {
       background-color: #43a047;
@@ -60,137 +59,61 @@
 <body>
 
   <div class="container">
-    <h2>Walkie-Talkie</h2>
-    <p class="status" id="status">Iniciando micrófono...</p>
+    <h2>Walkie-Talkie (A)</h2>
+    <p class="status" id="status">Iniciando...</p>
     <button id="talkBtn" disabled>CONECTANDO...</button>
   </div>
 
   <audio id="remoteAudio" autoplay></audio>
 
   <script>
-    const SALA_ID = "walkie-talkie-canal-global-98765";
-    
+    const MI_ID_FIJO = "tu-canal-exclusivo-host-123";
     let peer = null;
     let localStream = null;
     let activeCall = null;
-    let wakeLock = null;
 
     const statusEl = document.getElementById('status');
     const talkBtn = document.getElementById('talkBtn');
     const remoteAudio = document.getElementById('remoteAudio');
 
-    async function solicitarWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-        }
-      } catch (err) {}
-    }
-
-    // 1. Obtener acceso al micrófono
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then((stream) => {
         localStream = stream;
         localStream.getAudioTracks()[0].enabled = false;
-        solicitarWakeLock();
-        inicializarSistema();
+        iniciarHost();
       })
-      .catch((err) => {
-        statusEl.innerText = 'Error: Permite el acceso al micrófono.';
-      });
+      .catch(() => { statusEl.innerText = 'Permite el acceso al micrófono.'; });
 
-    function inicializarSistema() {
-      statusEl.innerText = 'Conectando al servidor...';
-
-      // Intentamos ser el Anfitrión (Host) tomando el ID fijo de la sala
-      peer = new Peer(SALA_ID);
+    function iniciarHost() {
+      statusEl.innerText = 'Esperando al otro teléfono...';
+      peer = new Peer(MI_ID_FIJO);
 
       peer.on('open', () => {
-        statusEl.innerText = 'Esperando al otro dispositivo...';
+        statusEl.innerText = 'Listo. Esperando conexión...';
       });
 
-      // Si alguien nos llama (somos el Host y entra el Cliente)
       peer.on('call', (call) => {
         if (activeCall) activeCall.close();
         activeCall = call;
         call.answer(localStream);
-        
+
         call.on('stream', (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
           activarBoton();
         });
 
         call.on('close', () => {
-          statusEl.innerText = 'El otro usuario se desconectó. Esperando reconexión...';
+          statusEl.innerText = 'Desconectado. Esperando reconexión...';
           talkBtn.disabled = true;
-          activeCall = null;
         });
       });
 
-      // Si el ID ya está ocupado, significa que el Host ya está abierto en otro lado -> Somos el Cliente
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-          statusEl.innerText = 'Conectando como cliente...';
-          conectarComoCliente();
-        } else {
-          statusEl.innerText = 'Reconectando...';
-          setTimeout(reiniciarSistemaCompleto, 3000);
+          statusEl.innerText = 'ID ocupado. Reintentando en 3s...';
+          setTimeout(() => { peer.destroy(); iniciarHost(); }, 3000);
         }
       });
-    }
-
-    function conectarComoCliente() {
-      // Creamos un peer con ID aleatorio propio para el cliente
-      peer = new Peer();
-
-      peer.on('open', () => {
-        llamarAlHost();
-      });
-
-      // Si el cliente sufre un error de red, reintentamos crear el peer
-      peer.on('error', (err) => {
-        if (err.type !== 'unavailable-id') {
-          setTimeout(conectarComoCliente, 3000);
-        }
-      });
-    }
-
-    function llamarAlHost() {
-      statusEl.innerText = 'Buscando al otro teléfono...';
-      const call = peer.call(SALA_ID, localStream);
-
-      if (call) {
-        call.on('stream', (remoteStream) => {
-          remoteAudio.srcObject = remoteStream;
-          activeCall = call;
-          activarBoton();
-        });
-
-        call.on('close', () => {
-          statusEl.innerText = 'Conexión perdida. Reintentando...';
-          talkBtn.disabled = true;
-          activeCall = null;
-          setTimeout(llamarAlHost, 3000);
-        });
-      } else {
-        setTimeout(llamarAlHost, 3000);
-      }
-
-      // Capturamos específicamente si el host todavía no enciende (error peer-unavailable)
-      peer.on('error', (err) => {
-        if (err.type === 'peer-unavailable') {
-          statusEl.innerText = 'Esperando a que el otro encienda...';
-          talkBtn.disabled = true;
-          setTimeout(llamarAlHost, 3000); // Vuelve a intentar llamar cada 3 segundos sin congelarse
-        }
-      });
-    }
-
-    function reiniciarSistemaCompleto() {
-      if (peer) {
-        try { peer.destroy(); } catch(e) {}
-      }
-      setTimeout(inicializarSistema, 2000);
     }
 
     function activarBoton() {
@@ -217,13 +140,6 @@
     talkBtn.addEventListener('mouseup', detener);
     talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); transmitir(); });
     talkBtn.addEventListener('touchend', (e) => { e.preventDefault(); detener(); });
-
-    // Reactivar el bloqueo de pantalla si el usuario minimiza y regresa a la app
-    document.addEventListener('visibilitychange', async () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        await solicitarWakeLock();
-      }
-    });
   </script>
 </body>
 </html>
