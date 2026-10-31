@@ -1,264 +1,166 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bailarín Inteligente</title>
-    <style>
-        body {
-            background-color: #0d1117;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
-        }
-
-        h1 {
-            font-size: 1.5rem;
-            margin-bottom: 5px;
-            color: #58a6ff;
-        }
-
-        #status {
-            margin-bottom: 20px;
-            font-size: 1.2rem;
-            color: #8b949e;
-        }
-
-        #start-btn {
-            padding: 12px 24px;
-            font-size: 1rem;
-            background-color: #238636;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.2s;
-            margin-bottom: 40px;
-        }
-
-        #start-btn:hover {
-            background-color: #2ea043;
-        }
-
-        /* DISEÑO DEL PERSONAJE */
-        #stage {
-            position: relative;
-            width: 200px;
-            height: 300px;
-            perspective: 800px;
-        }
-
-        .person {
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100px;
-            height: 250px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            transition: all 0.3s ease;
-        }
-
-        .head {
-            width: 50px;
-            height: 50px;
-            background-color: #ff7b72;
-            border-radius: 50%;
-            position: absolute;
-            top: 0;
-            z-index: 3;
-        }
-
-        .torso {
-            width: 40px;
-            height: 90px;
-            background-color: #79c0ff;
-            border-radius: 10px;
-            position: absolute;
-            top: 55px;
-            z-index: 2;
-        }
-
-        .limb {
-            width: 16px;
-            height: 80px;
-            background-color: #d2a8ff;
-            border-radius: 8px;
-            position: absolute;
-            transform-origin: top center;
-        }
-
-        .arm.left { top: 60px; left: 10px; }
-        .arm.right { top: 60px; right: 10px; }
-        .leg.left { top: 140px; left: 20px; }
-        .leg.right { top: 140px; right: 20px; }
-
-        /* ANIMACIONES POR GÉNERO (IA SIMULADA) */
-
-        /* 1. Silencio (Idle) */
-        .genre-silencio .head { animation: idle-head 2s infinite alternate; }
-        .genre-silencio .arm.left { transform: rotate(10deg); }
-        .genre-silencio .arm.right { transform: rotate(-10deg); }
-        .genre-silencio .leg.left { transform: rotate(5deg); }
-        .genre-silencio .leg.right { transform: rotate(-5deg); }
-
-        /* 2. Electrónica (Movimientos rápidos y robóticos) */
-        .genre-electronica { animation: bounce-fast 0.4s infinite alternate; }
-        .genre-electronica .head { animation: nod-fast 0.2s infinite alternate; }
-        .genre-electronica .arm.left { animation: pump-arm-left 0.4s infinite alternate; }
-        .genre-electronica .arm.right { animation: pump-arm-right 0.4s infinite alternate-reverse; }
-        .genre-electronica .leg.left { animation: step-left 0.4s infinite alternate; }
-        .genre-electronica .leg.right { animation: step-right 0.4s infinite alternate-reverse; }
-
-        /* 3. Reggaeton / Cumbia (Movimiento de cadera, más lento y fluido) */
-        .genre-latino { animation: hip-sway 0.8s infinite alternate ease-in-out; }
-        .genre-latino .head { animation: nod-slow 0.8s infinite alternate; }
-        .genre-latino .arm.left { animation: sway-arm-left 0.8s infinite alternate ease-in-out; }
-        .genre-latino .arm.right { animation: sway-arm-right 0.8s infinite alternate ease-in-out; }
-        .genre-latino .leg.left { animation: bend-knee 0.8s infinite alternate; }
-        .genre-latino .leg.right { animation: bend-knee 0.8s infinite alternate-reverse; }
-
-        /* 4. Rock / Metal (Agitando la cabeza, brazos arriba) */
-        .genre-rock { animation: bounce-heavy 0.5s infinite alternate; }
-        .genre-rock .head { animation: headbang 0.25s infinite alternate; background-color: #ff3333; }
-        .genre-rock .arm { background-color: #ff3333; }
-        .genre-rock .arm.left { animation: rock-arm-left 0.5s infinite alternate; }
-        .genre-rock .arm.right { animation: rock-arm-right 0.5s infinite alternate; }
-        .genre-rock .leg.left { transform: rotate(20deg); }
-        .genre-rock .leg.right { transform: rotate(-20deg); }
-
-        /* KEYFRAMES */
-        @keyframes idle-head { from { transform: translateY(0); } to { transform: translateY(5px); } }
-        
-        @keyframes bounce-fast { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-15px); } }
-        @keyframes nod-fast { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
-        @keyframes pump-arm-left { from { transform: rotate(30deg) translateY(0); } to { transform: rotate(150deg) translateY(-20px); } }
-        @keyframes pump-arm-right { from { transform: rotate(-30deg) translateY(0); } to { transform: rotate(-150deg) translateY(-20px); } }
-        @keyframes step-left { from { transform: rotate(0deg); } to { transform: rotate(20deg); } }
-        @keyframes step-right { from { transform: rotate(0deg); } to { transform: rotate(-20deg); } }
-
-        @keyframes hip-sway { from { transform: translateX(-60%) rotate(-5deg); } to { transform: translateX(-40%) rotate(5deg); } }
-        @keyframes nod-slow { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
-        @keyframes sway-arm-left { from { transform: rotate(20deg); } to { transform: rotate(60deg); } }
-        @keyframes sway-arm-right { from { transform: rotate(-20deg); } to { transform: rotate(-60deg); } }
-        @keyframes bend-knee { from { transform: rotate(0deg); height: 80px; } to { transform: rotate(15deg); height: 70px; } }
-
-        @keyframes bounce-heavy { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-10px); } }
-        @keyframes headbang { from { transform: rotate(-30deg) translateY(0); } to { transform: rotate(30deg) translateY(10px); } }
-        @keyframes rock-arm-left { from { transform: rotate(150deg); } to { transform: rotate(120deg); } }
-        @keyframes rock-arm-right { from { transform: rotate(-150deg); } to { transform: rotate(-120deg); } }
-
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Walkie-Talkie Automático</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #121212;
+      color: #ffffff;
+    }
+    .container {
+      background: #1e1e1e;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      width: 85%;
+      max-width: 320px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .status {
+      margin: 20px 0;
+      font-size: 15px;
+      color: #ffca28;
+    }
+    #talkBtn {
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      border: none;
+      background-color: #e53935;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      box-shadow: 0 6px 15px rgba(229, 57, 53, 0.4);
+      transition: transform 0.1s, background-color 0.2s;
+    }
+    #talkBtn:active {
+      background-color: #43a047;
+      transform: scale(0.95);
+    }
+    #talkBtn:disabled {
+      background-color: #555555;
+      box-shadow: none;
+    }
+  </style>
 </head>
 <body>
 
-    <h1>Bailarín Reactivo al Sonido</h1>
-    <div id="status">Presiona iniciar y pon algo de música...</div>
-    <button id="start-btn">Iniciar Escucha</button>
+  <div class="container">
+    <h2>Walkie-Talkie</h2>
+    <p class="status" id="status">Iniciando conexión...</p>
 
-    <div id="stage">
-        <div id="dancer" class="person genre-silencio">
-            <div class="head"></div>
-            <div class="torso"></div>
-            <div class="limb arm left"></div>
-            <div class="limb arm right"></div>
-            <div class="limb leg left"></div>
-            <div class="limb leg right"></div>
-        </div>
-    </div>
+    <button id="talkBtn" disabled>CONECTANDO...</button>
+  </div>
 
-    <script>
-        const btn = document.getElementById('start-btn');
-        const status = document.getElementById('status');
-        const dancer = document.getElementById('dancer');
+  <audio id="remoteAudio" autoplay></audio>
+
+  <script>
+    // Nombre fijo de la sala para que se conecten sin pedir ID
+    const SALA_ID = "mi-canal-walkietalkie-privado-12345";
+    
+    let peer = null;
+    let localStream = null;
+    let activeCall = null;
+
+    const statusEl = document.getElementById('status');
+    const talkBtn = document.getElementById('talkBtn');
+    const remoteAudio = document.getElementById('remoteAudio');
+
+    // 1. Obtener acceso al micrófono primero
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        localStream = stream;
+        // El micrófono empieza deshabilitado/muteado
+        localStream.getAudioTracks()[0].enabled = false;
         
-        let audioContext;
-        let analyser;
-        let microphone;
-        let dataArray;
+        iniciarConexion();
+      })
+      .catch((err) => {
+        statusEl.innerText = 'Error: Permite el acceso al micrófono.';
+      });
 
-        btn.addEventListener('click', async () => {
-            try {
-                // Solicitar permisos de micrófono
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                microphone = audioContext.createMediaStreamSource(stream);
-                
-                microphone.connect(analyser);
-                analyser.fftSize = 256; 
-                
-                const bufferLength = analyser.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
-                
-                btn.style.display = 'none';
-                status.innerText = "Escuchando música... ¡Analizando género!";
-                status.style.color = "#3fb950";
-                
-                analyzeAudio();
+    function iniciarConexion() {
+      // 2. Intentar registrarse como el "Teléfono A" (Líder de la sala)
+      peer = new Peer(SALA_ID);
 
-            } catch (err) {
-                status.innerText = "Error: Necesitas dar permiso al micrófono.";
-                status.style.color = "#f85149";
-                console.error('Error de micrófono:', err);
-            }
+      peer.on('open', () => {
+        // Este teléfono creó la sala y queda a la espera del otro
+        statusEl.innerText = 'Esperando al otro teléfono...';
+      });
+
+      // Si este teléfono recibe la llamada (es decir, fue el primero en abrir la sala)
+      peer.on('call', (call) => {
+        activeCall = call;
+        call.answer(localStream);
+
+        call.on('stream', (remoteStream) => {
+          remoteAudio.srcObject = remoteStream;
+          activarBoton();
         });
+      });
 
-        function analyzeAudio() {
-            requestAnimationFrame(analyzeAudio);
-            
-            analyser.getByteFrequencyData(dataArray);
-            
-            let bass = 0;
-            let mid = 0;
-            let treble = 0;
-            
-            // Separar las frecuencias en Graves (Bass), Medios (Mid) y Agudos (Treble)
-            for (let i = 0; i < 10; i++) bass += dataArray[i];
-            for (let i = 10; i < 50; i++) mid += dataArray[i];
-            for (let i = 50; i < 100; i++) treble += dataArray[i];
-            
-            bass = bass / 10;
-            mid = mid / 40;
-            treble = treble / 50;
+      // 3. Si la sala ya existe (significa que es el "Teléfono B"), se conecta automáticamente
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          // El ID ya existe, así que entramos como cliente conectándonos al ID de la sala
+          peer = new Peer(); // Genera ID propio automáticamente
 
-            // Algoritmo de "IA" simulado: Clasifica el estilo de baile según los patrones de frecuencia
-            let detectedGenre = "genre-silencio";
-            let genreText = "Silencio / Muy bajo";
+          peer.on('open', () => {
+            statusEl.innerText = 'Conectando con el otro dispositivo...';
+            
+            // Llamar automáticamente a la sala fija
+            activeCall = peer.call(SALA_ID, localStream);
 
-            if (bass > 200 && treble < 100) {
-                // Muchos graves rítmicos: Reggaeton / Cumbia / Latino
-                detectedGenre = "genre-latino";
-                genreText = "🎶 Ritmo Latino (Reggaeton/Cumbia)";
-            } 
-            else if (treble > 150 && mid > 120 && bass > 150) {
-                // Todo alto, mucho ruido/guitarras: Rock / Metal
-                detectedGenre = "genre-rock";
-                genreText = "🎸 ¡Rock / Metal pesado!";
-            } 
-            else if (bass > 130 || mid > 130) {
-                // Frecuencias medias-altas marcadas: Electrónica / Pop
-                detectedGenre = "genre-electronica";
-                genreText = "🎧 Música Electrónica / Pop";
-            }
-
-            // Cambiar la clase CSS para cambiar toda la animación del cuerpo
-            if (dancer.className !== `person ${detectedGenre}`) {
-                dancer.className = `person ${detectedGenre}`;
-                status.innerText = genreText;
-            }
+            activeCall.on('stream', (remoteStream) => {
+              remoteAudio.srcObject = remoteStream;
+              activarBoton();
+            });
+          });
+        } else {
+          statusEl.innerText = 'Error de conexión: ' + err.type;
         }
-    </script>
+      });
+    }
 
+    function activarBoton() {
+      statusEl.innerText = 'Conectado. Mantén para hablar.';
+      talkBtn.innerText = 'MANTÉN PARA HABLAR';
+      talkBtn.disabled = false;
+    }
+
+    // 4. Activar transmisión mientras se presiona el botón
+    function transmitir() {
+      if (localStream && !talkBtn.disabled) {
+        localStream.getAudioTracks()[0].enabled = true;
+        statusEl.innerText = 'Transmitiendo voz...';
+      }
+    }
+
+    function detener() {
+      if (localStream) {
+        localStream.getAudioTracks()[0].enabled = false;
+        statusEl.innerText = 'En escucha...';
+      }
+    }
+
+    // Eventos para pantalla táctil y ratón
+    talkBtn.addEventListener('mousedown', transmitir);
+    talkBtn.addEventListener('mouseup', detener);
+    talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); transmitir(); });
+    talkBtn.addEventListener('touchend', (e) => { e.preventDefault(); detener(); });
+  </script>
 </body>
 </html>
