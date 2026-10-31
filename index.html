@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walkie-Talkie Conexión Estable</title>
+  <title>Walkie-Talkie Definitivo</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body {
@@ -68,7 +68,6 @@
   <audio id="remoteAudio" autoplay></audio>
 
   <script>
-    // ID fijo de la sala compartida para ambos teléfonos
     const SALA_ID = "walkie-talkie-canal-global-98765";
     
     let peer = null;
@@ -103,16 +102,14 @@
     function inicializarSistema() {
       statusEl.innerText = 'Conectando al servidor...';
 
-      // Intentamos crear el Peer usando el ID de la sala principal
+      // Intentamos ser el Anfitrión (Host) tomando el ID fijo de la sala
       peer = new Peer(SALA_ID);
 
-      // Si se abre con éxito, significa que SOMOS EL PRIMERO en entrar. 
-      // Nos quedamos esperando a que el otro teléfono se conecte.
       peer.on('open', () => {
         statusEl.innerText = 'Esperando al otro dispositivo...';
       });
 
-      // Si alguien nos llama (entra el segundo teléfono), respondemos la llamada
+      // Si alguien nos llama (somos el Host y entra el Cliente)
       peer.on('call', (call) => {
         if (activeCall) activeCall.close();
         activeCall = call;
@@ -126,37 +123,40 @@
         call.on('close', () => {
           statusEl.innerText = 'El otro usuario se desconectó. Esperando reconexión...';
           talkBtn.disabled = true;
+          activeCall = null;
         });
       });
 
-      // Si da error "unavailable-id", significa que la sala YA ESTÁ OCUPADA 
-      // por el primer teléfono. Por lo tanto, SOMOS EL SEGUNDO teléfono.
+      // Si el ID ya está ocupado, significa que el Host ya está abierto en otro lado -> Somos el Cliente
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-          statusEl.innerText = 'Sala ocupada. Conectando como cliente...';
+          statusEl.innerText = 'Conectando como cliente...';
           conectarComoCliente();
         } else {
-          statusEl.innerText = 'Error: ' + err.type;
+          statusEl.innerText = 'Reconectando...';
+          setTimeout(reiniciarSistemaCompleto, 3000);
         }
       });
     }
 
     function conectarComoCliente() {
-      // Creamos un Peer con ID aleatorio propio
+      // Creamos un peer con ID aleatorio propio para el cliente
       peer = new Peer();
 
-      peer.on('open', (id) => {
-        statusEl.innerText = 'Buscando al otro teléfono...';
-        llamarAlServidorDeSala();
+      peer.on('open', () => {
+        llamarAlHost();
       });
 
-      peer.on('error', () => {
-        setTimeout(conectarComoCliente, 3000);
+      // Si el cliente sufre un error de red, reintentamos crear el peer
+      peer.on('error', (err) => {
+        if (err.type !== 'unavailable-id') {
+          setTimeout(conectarComoCliente, 3000);
+        }
       });
     }
 
-    function llamarAlServidorDeSala() {
-      // Llamamos directamente al ID principal de la sala donde está el primer teléfono
+    function llamarAlHost() {
+      statusEl.innerText = 'Buscando al otro teléfono...';
       const call = peer.call(SALA_ID, localStream);
 
       if (call) {
@@ -169,12 +169,28 @@
         call.on('close', () => {
           statusEl.innerText = 'Conexión perdida. Reintentando...';
           talkBtn.disabled = true;
-          setTimeout(llamarAlServidorDeSala, 3000); // Reintenta llamar si se desconecta
+          activeCall = null;
+          setTimeout(llamarAlHost, 3000);
         });
       } else {
-        // Si falla, reintentar en 3 segundos sin mostrar errores molestos en pantalla
-        setTimeout(llamarAlServidorDeSala, 3000);
+        setTimeout(llamarAlHost, 3000);
       }
+
+      // Capturamos específicamente si el host todavía no enciende (error peer-unavailable)
+      peer.on('error', (err) => {
+        if (err.type === 'peer-unavailable') {
+          statusEl.innerText = 'Esperando a que el otro encienda...';
+          talkBtn.disabled = true;
+          setTimeout(llamarAlHost, 3000); // Vuelve a intentar llamar cada 3 segundos sin congelarse
+        }
+      });
+    }
+
+    function reiniciarSistemaCompleto() {
+      if (peer) {
+        try { peer.destroy(); } catch(e) {}
+      }
+      setTimeout(inicializarSistema, 2000);
     }
 
     function activarBoton() {
