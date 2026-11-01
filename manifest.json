@@ -1,15 +1,15 @@
 {
-  "name": "Chat Pro & Walkie",
-  "short_name": "ChatPro",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#0b141a",
-  "theme_color": "#00a884",
-  "icons": [
-    {
-      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='105' fill='%2300a884'/><path d='M365.4 321.6l-51.7-22.3c-7.5-3.2-16.2-1-21.6 5.3l-31.5 38.3c-58.1-30-105-76.9-135-135l38.3-31.5c6.3-5.4 8.5-14.1 5.3-21.6l-22.3-51.7c-4.4-10.2-16.1-15.2-26.6-11.7l-48.4 16.1c-11.4 3.8-18.4 15.6-15.6 27.5 13.9 59.8 45.4 114.7 92 161.3s101.5 78.1 161.3 92c11.9 2.8 23.7-4.2 27.5-15.6l16.1-48.4c3.5-10.5-1.5-22.2-11.7-26.6z' fill='%23ffffff'/></svg>",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
-    }
-  ]
+"name": "Chat Pro & Walkie",
+"short_name": "ChatPro",
+"start_url": "./index.html",
+"display": "standalone",
+"background_color": "#0b141a",
+"theme_color": "#00a884",
+"icons": [
+{
+"src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='105' fill='%2300a884'/><path d='M365.4 321.6l-51.7-22.3c-7.5-3.2-16.2-1-21.6 5.3l-31.5 38.3c-58.1-30-105-76.9-135-135l38.3-31.5c6.3-5.4 8.5-14.1 5.3-21.6l-22.3-51.7c-4.4-10.2-16.1-15.2-26.6-11.7l-48.4 16.1c-11.4 3.8-18.4 15.6-15.6 27.5 13.9 59.8 45.4 114.7 92 161.3s101.5 78.1 161.3 92c11.9 2.8 23.7-4.2 27.5-15.6l16.1-48.4c3.5-10.5-1.5-22.2-11.7-26.6z' fill='%23ffffff'/></svg>",
+"sizes": "512x512",
+"type": "image/svg+xml"
+}
+]
 }
