@@ -20,9 +20,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     .chat-bg {
       background-color: #0b141a;
       background-image: radial-gradient(#1f2c34 1px, transparent 1px);
@@ -42,15 +40,30 @@
 </head>
 <body class="bg-slate-950 text-white h-screen flex flex-col justify-between overflow-hidden select-none">
 
+  <!-- MODAL DE SELECCIÓN DE ROL INICIAL -->
+  <div id="roleModal" class="fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center p-6 text-center space-y-6">
+    <div class="w-20 h-20 rounded-full bg-emerald-600 flex items-center justify-center text-3xl shadow-xl">
+      <i class="fa-solid fa-mobile-screen-button"></i>
+    </div>
+    <div class="space-y-2">
+      <h2 class="text-xl font-bold">Configura tu Dispositivo</h2>
+      <p class="text-xs text-slate-400">Selecciona qué teléfono es este para conectar llamadas y mensajes correctamente:</p>
+    </div>
+    <div class="flex flex-col space-y-3 w-full max-w-xs">
+      <button onclick="asignarRol('dispositivo_A')" class="py-3.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-sm shadow-lg active:scale-95">Soy el Teléfono 1 (A)</button>
+      <button onclick="asignarRol('dispositivo_B')" class="py-3.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-sm shadow-lg active:scale-95">Soy el Teléfono 2 (B)</button>
+    </div>
+  </div>
+
   <!-- HEADER NATIVO ESTILO WHATSAPP -->
-  <header class="bg-[#202c33] border-b border-slate-800 px-3 py-2.5 flex items-center justify-between shrink-0 z-50 shadow-md">
+  <header class="bg-[#202c33] border-b border-slate-800 px-3 py-2.5 flex items-center justify-between shrink-0 z-40 shadow-md">
     <div class="flex items-center space-x-3">
       <div class="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-base text-white shadow">
         <i class="fa-solid fa-user-shield"></i>
       </div>
       <div>
-        <h1 class="font-bold text-sm leading-tight text-slate-100" id="userNameTitle">Chat en Línea</h1>
-        <p class="text-[11px] text-emerald-400 font-medium" id="statusText">Conectando a Firebase...</p>
+        <h1 class="font-bold text-sm leading-tight text-slate-100" id="roleTitle">Chat en Línea</h1>
+        <p class="text-[11px] text-emerald-400 font-medium" id="statusText">Conectando...</p>
       </div>
     </div>
 
@@ -62,7 +75,10 @@
       <button onclick="iniciarLlamadaVozReal()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center active:scale-95 text-emerald-400" title="Llamada de Voz">
         <i class="fa-solid fa-phone text-base"></i>
       </button>
-      <button onclick="toggleAjustesModal()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center active:scale-95 text-slate-300" title="Ajustes y Personalización">
+      <button onclick="toggleWalkieModal()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center active:scale-95 text-red-500" title="Walkie-Talkie">
+        <i class="fa-solid fa-walkie-talkie text-lg"></i>
+      </button>
+      <button onclick="toggleAjustesModal()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center active:scale-95 text-slate-300" title="Ajustes">
         <i class="fa-solid fa-gear text-lg"></i>
       </button>
     </div>
@@ -73,10 +89,25 @@
     <div class="flex justify-start">
       <div class="bubble-received p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm shadow leading-relaxed">
         <p class="font-bold text-xs text-amber-400 mb-1"><i class="fa-solid fa-circle-info mr-1"></i> Sistema</p>
-        ¡Bienvenido! Los mensajes escritos aquí se sincronizan en tiempo real con el otro teléfono mediante Firebase. Usa el ícono de engranaje arriba para cambiar fondos, colores y fuentes.
+        ¡Sistema activo! Envía textos, fotos, archivos o notas de voz reales. Usa el botón rojo arriba para Walkie-Talkie en vivo.
       </div>
     </div>
   </main>
+
+  <!-- MODAL DE WALKIE-TALKIE EN VIVO (PUSH TO TALK) -->
+  <div id="walkieModal" class="fixed inset-0 bg-slate-950/95 z-50 hidden flex-col items-center justify-center p-6 space-y-6">
+    <button onclick="toggleWalkieModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white">
+      <i class="fa-solid fa-xmark text-lg"></i>
+    </button>
+    <div class="text-center space-y-1">
+      <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Walkie-Talkie Bidireccional</p>
+      <h2 class="text-lg font-bold text-slate-200">Mantén presionado para hablar</h2>
+    </div>
+    <button id="btnTalk" class="w-48 h-48 rounded-full bg-red-600 border-8 border-red-950 flex flex-col items-center justify-center shadow-2xl shadow-red-900/50 active:scale-95 transition-all">
+      <i class="fa-solid fa-microphone text-5xl mb-2 text-white"></i>
+      <span class="font-bold text-xs text-white" id="btnTalkText">HABLAR</span>
+    </button>
+  </div>
 
   <!-- MODAL DE LLAMADA / VIDEOLLAMADA ENTRANTE O ACTIVA -->
   <div id="callModal" class="fixed inset-0 bg-slate-950/95 z-50 hidden flex-col items-center justify-between p-6">
@@ -85,10 +116,8 @@
         <i class="fa-solid fa-user"></i>
       </div>
       <h2 class="text-xl font-bold" id="callStatusText">Llamando...</h2>
-      <p class="text-xs text-slate-400">Conexión WebRTC Segura</p>
     </div>
 
-    <!-- Pantalla de Video (si es videollamada) -->
     <div id="videoContainer" class="w-full flex-1 relative rounded-2xl overflow-hidden my-4 bg-slate-900 hidden flex items-center justify-center border border-slate-800">
       <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
       <div class="absolute bottom-4 right-4 w-28 h-40 rounded-xl overflow-hidden border-2 border-slate-700 shadow-2xl bg-black">
@@ -106,20 +135,18 @@
     </div>
   </div>
 
-  <!-- PANEL DE AJUSTES Y PERSONALIZACIÓN (12 COLORES, GALERÍA, FUENTES) -->
+  <!-- PANEL DE AJUSTES Y PERSONALIZACIÓN -->
   <div id="ajustesModal" class="fixed inset-0 bg-slate-900/98 backdrop-blur-md z-50 hidden p-6 overflow-y-auto space-y-6">
     <div class="flex justify-between items-center border-b border-slate-800 pb-3">
       <h2 class="text-lg font-bold">Ajustes y Personalización</h2>
       <button onclick="toggleAjustesModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
 
-    <!-- 12 Colores Sólidos de Fondo -->
     <div class="space-y-2">
       <label class="text-xs font-semibold text-slate-400">Fondo de Chat (12 Colores Sólidos)</label>
       <div class="grid grid-cols-6 gap-2" id="colorGrid"></div>
     </div>
 
-    <!-- Imagen de Galería -->
     <div class="space-y-2">
       <label class="text-xs font-semibold text-slate-400">Fondo con Imagen de Galería</label>
       <input type="file" id="bgFileInput" accept="image/*" class="hidden" onchange="cambiarFondoGaleria(event)">
@@ -129,7 +156,6 @@
       </button>
     </div>
 
-    <!-- Personalización de Burbujas y Fuentes -->
     <div class="space-y-4 border-t border-slate-800 pt-4">
       <div>
         <label class="text-xs font-semibold text-slate-400 block mb-1">Color de Burbuja Enviada</label>
@@ -145,7 +171,6 @@
           <option value="inherit">Predeterminada (System)</option>
           <option value="'Courier New', monospace">Modo Clásico (Mono)</option>
           <option value="Georgia, serif">Elegante (Serif)</option>
-          <option value="'Comic Sans MS', cursive">Divertida (Comic)</option>
         </select>
       </div>
     </div>
@@ -154,11 +179,16 @@
   <!-- BARRA INFERIOR DE MENSAJERÍA -->
   <footer class="bg-[#202c33] border-t border-slate-800 p-2.5 flex items-center space-x-2 shrink-0 z-40">
     <input type="file" id="fileInput" class="hidden" onchange="enviarArchivoFirebase(event)">
-    <button onclick="document.getElementById('fileInput').click()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center text-slate-400 active:scale-95 shrink-0">
+    <button onclick="document.getElementById('fileInput').click()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center text-slate-400 active:scale-95 shrink-0" title="Adjuntar Archivo">
       <i class="fa-solid fa-paperclip text-lg"></i>
     </button>
 
     <input type="text" id="chatInput" placeholder="Escribe un mensaje..." class="flex-1 bg-[#2a3942] border-none rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none">
+
+    <!-- Botón Grabación Nota de Voz Real -->
+    <button id="btnAudioRec" onclick="alternarGrabacionAudio()" class="w-10 h-10 rounded-full hover:bg-slate-700/50 flex items-center justify-center text-slate-400 active:scale-95 shrink-0" title="Grabar Audio">
+      <i class="fa-solid fa-microphone text-lg" id="micIcon"></i>
+    </button>
 
     <button onclick="enviarMensajeFirebase()" class="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white active:scale-95 shrink-0 shadow">
       <i class="fa-solid fa-paper-plane text-sm"></i>
@@ -167,9 +197,8 @@
 
   <audio id="remoteAudio" autoplay></audio>
 
-  <!-- LÓGICA TÉCNICA REAL (FIREBASE + PEERJS + AUDIO TONE) -->
+  <!-- LÓGICA TÉCNICA FUNCIONAL -->
   <script>
-    // Configuración de tu Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyBSxOrPsgmNuiKwfD3OFCQQ6pQt6_LiNp8",
       authDomain: "ejemplos-6f88c.firebaseapp.com",
@@ -183,117 +212,162 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Identificador único de dispositivo para sincronizar entre 2 teléfonos
-    let miId = localStorage.getItem('chat_device_id');
-    if (!miId) {
-      miId = 'user_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('chat_device_id', miId);
-    }
-    const otroId = (miId === 'user_A') ? 'user_B' : 'user_A'; // Sincronizador de pares
-
-    // PeerJS para llamadas reales
-    let peer = new Peer(miId);
+    let miId = localStorage.getItem('chat_role');
+    let otroId = null;
+    let peer = null;
     let localStream = null;
     let currentCall = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
-    peer.on('open', (id) => {
-      document.getElementById('statusText').innerText = "En línea (ID: " + id + ")";
-    });
+    if (miId) {
+      document.getElementById('roleModal').classList.add('hidden');
+      inicializarSistemaApp(miId);
+    }
 
-    // Escuchar llamadas entrantes (Suena el teléfono como WhatsApp)
-    peer.on('call', (call) => {
-      currentCall = call;
-      reproducirTonoLlamada();
-      document.getElementById('callModal').classList.remove('hidden');
-      document.getElementById('callModal').classList.add('flex');
-      document.getElementById('callStatusText').innerText = "Llamada entrante...";
-      document.getElementById('btnContestar').classList.remove('hidden');
-    });
+    function asignarRol(rol) {
+      localStorage.setItem('chat_role', rol);
+      document.getElementById('roleModal').classList.add('hidden');
+      miId = rol;
+      inicializarSistemaApp(miId);
+      location.reload();
+    }
 
-    // Obtener permisos de medios al iniciar
+    function inicializarSistemaApp(rol) {
+      otroId = (rol === 'dispositivo_A') ? 'dispositivo_B' : 'dispositivo_A';
+      document.getElementById('roleTitle').innerText = `Chat (${rol === 'dispositivo_A' ? 'Teléfono 1' : 'Teléfono 2'})`;
+
+      // PeerJS
+      peer = new Peer(rol);
+      peer.on('open', () => {
+        document.getElementById('statusText').innerText = "En línea y conectado";
+      });
+
+      peer.on('call', (call) => {
+        currentCall = call;
+        reproducirTonoNotif();
+        document.getElementById('callModal').classList.remove('hidden');
+        document.getElementById('callModal').classList.add('flex');
+        document.getElementById('callStatusText').innerText = "Llamada entrante...";
+        document.getElementById('btnContestar').classList.remove('hidden');
+      });
+
+      // Firebase Chat Listener
+      const mensajesRef = db.ref('mensajes_chat_pro');
+      mensajesRef.on('child_added', (snapshot) => {
+        const data = snapshot.val();
+        if (data.remitente !== miId) {
+          agregarBurbujaAlDOM(data.texto, 'received');
+          reproducirTonoNotif();
+        }
+      });
+    }
+
+    // Permisos multimedia completos
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       .then(stream => {
         localStream = stream;
+        localStream.getAudioTracks()[0].enabled = false;
+        if(localStream.getVideoTracks().length > 0) localStream.getVideoTracks()[0].enabled = false;
         document.getElementById('localVideo').srcObject = stream;
       }).catch(() => {});
 
-    // Sincronización de Mensajes en Tiempo Real con Firebase Database
-    const mensajesRef = db.ref('mensajes_chat');
-    mensajesRef.on('child_added', (snapshot) => {
-      const data = snapshot.val();
-      if (data.remitente !== miId) {
-        agregarBurbujaAlDOM(data.texto, 'received');
-        reproducirNotificacionSonido();
-      }
-    });
-
+    // Enviar Texto
     function enviarMensajeFirebase() {
       const input = document.getElementById('chatInput');
       const text = input.value.trim();
       if (!text) return;
 
-      mensajesRef.push({
-        remitente: miId,
-        texto: text,
-        timestamp: Date.now()
-      });
-
+      db.ref('mensajes_chat_pro').push({ remitente: miId, texto: text, timestamp: Date.now() });
       agregarBurbujaAlDOM(text, 'sent');
       input.value = '';
     }
 
+    // Enviar Archivos e Imágenes
     function enviarArchivoFirebase(e) {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(evt) {
-        let contenidoHTML = "";
-        if (file.type.startsWith('image/')) {
-          contenidoHTML = `<img src="${evt.target.result}" class="rounded-lg max-w-full h-auto mb-1">`;
-        } else {
-          contenidoHTML = `<i class="fa-solid fa-file mr-2"></i> Archivo: ${file.name}`;
-        }
-        mensajesRef.push({ remitente: miId, texto: contenidoHTML, timestamp: Date.now() });
-        agregarBurbujaAlDOM(contenidoHTML, 'sent');
+        let contenido = file.type.startsWith('image/') ? 
+          `<img src="${evt.target.result}" class="rounded-lg max-w-full h-auto mb-1">` : 
+          `<i class="fa-solid fa-file mr-2"></i> Archivo: ${file.name}`;
+        
+        db.ref('mensajes_chat_pro').push({ remitente: miId, texto: contenido, timestamp: Date.now() });
+        agregarBurbujaAlDOM(contenido, 'sent');
       };
       reader.readAsDataURL(file);
     }
 
-    function agregarBurbujaAlDOM(htmlTexto, tipo) {
+    // Grabar Nota de Voz Real
+    async function alternarGrabacionAudio() {
+      const btn = document.getElementById('btnAudioRec');
+      const micIcon = document.getElementById('micIcon');
+
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(audioChunks, { type: 'audio/mp3' });
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+              const audioHtml = `<audio controls src="${evt.target.result}" class="w-full max-w-[220px]"></audio>`;
+              db.ref('mensajes_chat_pro').push({ remitente: miId, texto: audioHtml, timestamp: Date.now() });
+              agregarBurbujaAlDOM(audioHtml, 'sent');
+            };
+            reader.readAsDataURL(blob);
+          };
+          mediaRecorder.start();
+          isRecording = true;
+          btn.classList.add('bg-red-600/50');
+          micIcon.classList.replace('text-slate-400', 'text-white');
+        } catch(e) {}
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        btn.classList.remove('bg-red-600/50');
+        micIcon.classList.replace('text-white', 'text-slate-400');
+      }
+    }
+
+    function agregarBurbujaAlDOM(html, tipo) {
       const chat = document.getElementById('chatContainer');
       const div = document.createElement('div');
       div.className = `flex ${tipo === 'sent' ? 'justify-end' : 'justify-start'} mb-1`;
-      div.innerHTML = `<div class="${tipo === 'sent' ? 'bubble-sent rounded-tr-none' : 'bubble-received rounded-tl-none'} p-3 rounded-2xl max-w-[80%] text-sm shadow relative">${htmlTexto}</div>`;
+      div.innerHTML = `<div class="${tipo === 'sent' ? 'bubble-sent rounded-tr-none' : 'bubble-received rounded-tl-none'} p-3 rounded-2xl max-w-[80%] text-sm shadow relative">${html}</div>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
-    // Funciones de Llamada Real WebRTC
+    // Llamadas y Videollamadas
     function iniciarLlamadaVozReal() {
-      if (!localStream) return alert("Se requieren permisos de micrófono.");
+      if (!localStream) return alert("Permite acceso a micrófono.");
       const call = peer.call(otroId, localStream);
-      configurarLlamadaActiva(call, false);
+      configurarLlamada(call, false);
     }
 
     function iniciarVideollamadaReal() {
-      if (!localStream) return alert("Se requieren permisos de cámara.");
+      if (!localStream) return alert("Permite acceso a cámara.");
+      localStream.getVideoTracks()[0].enabled = true;
       const call = peer.call(otroId, localStream);
-      configurarLlamadaActiva(call, true);
+      configurarLlamada(call, true);
     }
 
-    function configurarLlamadaActiva(call, esVideo) {
+    function configurarLlamada(call, esVideo) {
       currentCall = call;
       document.getElementById('callModal').classList.remove('hidden');
       document.getElementById('callModal').classList.add('flex');
-      document.getElementById('callStatusText').innerText = "Llamando al otro dispositivo...";
-      
-      if (esVideo) {
+      document.getElementById('callStatusText').innerText = "Llamando...";
+      if(esVideo) {
         document.getElementById('videoContainer').classList.remove('hidden');
         document.getElementById('videoContainer').classList.add('flex');
       }
-
-      call.on('stream', (remoteStream) => {
-        document.getElementById('remoteVideo').srcObject = remoteStream;
+      call.on('stream', (stream) => {
+        document.getElementById('remoteVideo').srcObject = stream;
         document.getElementById('callStatusText').innerText = "En llamada";
       });
     }
@@ -301,11 +375,9 @@
     function contestarLlamada() {
       if (currentCall && localStream) {
         currentCall.answer(localStream);
-        currentCall.on('stream', (remoteStream) => {
-          document.getElementById('remoteVideo').srcObject = remoteStream;
+        currentCall.on('stream', (stream) => {
+          document.getElementById('remoteVideo').srcObject = stream;
           document.getElementById('callStatusText').innerText = "En llamada";
-          document.getElementById('videoContainer').classList.remove('hidden');
-          document.getElementById('videoContainer').classList.add('flex');
         });
         document.getElementById('btnContestar').classList.add('hidden');
       }
@@ -319,50 +391,56 @@
       document.getElementById('videoContainer').classList.remove('flex');
     }
 
-    // Generar paleta de 12 colores sólidos en Ajustes
-    const coloresSólidos = ['#0b141a', '#1e293b', '#111827', '#0284c7', '#0d9488', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed', '#c026d3', '#475569', '#000000'];
+    // Walkie Talkie PUSH-TO-TALK
+    function toggleWalkieModal() {
+      const m = document.getElementById('walkieModal');
+      m.classList.toggle('hidden');
+      m.classList.toggle('flex');
+    }
+
+    const btnTalk = document.getElementById('btnTalk');
+    function transmitirWalkie() {
+      if (localStream) localStream.getAudioTracks()[0].enabled = true;
+    }
+    function detenerWalkie() {
+      if (localStream) localStream.getAudioTracks()[0].enabled = false;
+    }
+    btnTalk.addEventListener('mousedown', transmitirWalkie);
+    btnTalk.addEventListener('mouseup', detenerWalkie);
+    btnTalk.addEventListener('touchstart', (e) => { e.preventDefault(); transmitirWalkie(); });
+    btnTalk.addEventListener('touchend', (e) => { e.preventDefault(); detenerWalkie(); });
+
+    // Ajustes y 12 colores
+    const colores = ['#0b141a', '#1e293b', '#111827', '#0284c7', '#0d9488', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed', '#c026d3', '#475569', '#000000'];
     const colorGrid = document.getElementById('colorGrid');
-    coloresSólidos.forEach(c => {
-      const btn = document.createElement('button');
-      btn.className = "w-full h-8 rounded-lg border border-slate-700 shadow-sm";
-      btn.style.backgroundColor = c;
-      btn.onclick = () => {
-        document.querySelector('.chat-bg').style.backgroundImage = 'none';
-        document.querySelector('.chat-bg').style.backgroundColor = c;
-      };
-      colorGrid.appendChild(btn);
+    colores.forEach(c => {
+      const b = document.createElement('button');
+      b.className = "w-full h-8 rounded-lg border border-slate-700 shadow-sm";
+      b.style.backgroundColor = c;
+      b.onclick = () => { document.querySelector('.chat-bg').style.backgroundImage = 'none'; document.querySelector('.chat-bg').style.backgroundColor = c; };
+      colorGrid.appendChild(b);
     });
 
     function cambiarFondoGaleria(e) {
       const file = e.target.files[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (evt) => {
-          document.querySelector('.chat-bg').style.backgroundImage = `url(${evt.target.result})`;
-        };
+        reader.onload = (evt) => { document.querySelector('.chat-bg').style.backgroundImage = `url(${evt.target.result})`; };
         reader.readAsDataURL(file);
       }
     }
 
-    function toggleAjustesModal() {
-      const modal = document.getElementById('ajustesModal');
-      modal.classList.toggle('hidden');
-    }
+    function toggleAjustesModal() { document.getElementById('ajustesModal').classList.toggle('hidden'); }
 
-    function reproducirNotificacionSonido() {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 600;
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
-    }
-
-    function reproducirTonoLlamada() {
-      reproducirNotificacionSonido();
+    function reproducirTonoNotif() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.frequency.value = 550; g.gain.setValueAtTime(0.08, ctx.currentTime);
+        osc.start(); osc.stop(ctx.currentTime + 0.15);
+      } catch(e) {}
     }
   </script>
 </body>
